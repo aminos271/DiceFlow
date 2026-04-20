@@ -11,7 +11,17 @@ from diceflow.models import Action
 Script = dict[str, Any]
 VALID_OUTCOME_RESULTS = {"critical_success", "success", "fail", "critical_fail"}
 VALID_ACTION_KEYS = {"dc", "required_tools", "outcomes"}
-VALID_CHANGE_KEYS = {"player", "entities", "flags", "events"}
+VALID_CHANGE_KEYS = {
+    "player",
+    "entities",
+    "flags",
+    "events",
+    "spawn_entities",
+    "remove_entities",
+    "reveal_entities",
+    "move_item_to_inventory",
+    "set_entity_states",
+}
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 REQUIRED_TOP_LEVEL_KEYS = {
     "id",
@@ -171,6 +181,17 @@ def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has
 
     if "events" in changes and not isinstance(changes["events"], list):
         errors.append(f"{path}.events must be a list")
+
+    if "spawn_entities" in changes and not isinstance(changes["spawn_entities"], dict):
+        errors.append(f"{path}.spawn_entities must be a dict")
+    if "remove_entities" in changes and not isinstance(changes["remove_entities"], list):
+        errors.append(f"{path}.remove_entities must be a list")
+    if "reveal_entities" in changes and not isinstance(changes["reveal_entities"], list):
+        errors.append(f"{path}.reveal_entities must be a list")
+    if "move_item_to_inventory" in changes and not isinstance(changes["move_item_to_inventory"], list):
+        errors.append(f"{path}.move_item_to_inventory must be a list")
+    if "set_entity_states" in changes and not isinstance(changes["set_entity_states"], dict):
+        errors.append(f"{path}.set_entity_states must be a dict")
 
 
 def _validate_ending_conditions(script: Script, errors: list[str]) -> None:

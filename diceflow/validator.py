@@ -7,7 +7,7 @@ from diceflow.script_rules import validate_scene_rules
 from diceflow.state import GameState
 
 
-TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "talk"}
+TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "talk", "take"}
 
 
 def validate(action: Action, state: GameState) -> dict[str, str | bool]:
@@ -24,6 +24,8 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
 
     if target_id and not is_scene_action:
         action["target_id"] = target_id
+        if not state.is_interactable_entity(target_id):
+            return {"valid": False, "reason": f"目标当前不可交互：{target or target_id}"}
         entity = state.entities[target_id]
         allowed_actions = get_allowed_actions(entity)
         if intent_family not in allowed_actions:
@@ -43,11 +45,11 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     required_tools = action_spec.get("required_tools", [])
     if intent_family == "use" and required_tools:
         tool_id = action.get("tool_id")
-        if tool_id not in required_tools:
+        if not _tool_matches_required(tool_id, required_tools, state):
             return {"valid": False, "reason": f"该行动需要使用：{'、'.join(required_tools)}。"}
 
     for tool in required_tools:
-        if tool not in state.player.get("inventory", []):
+        if not _has_required_tool(tool, state):
             return {"valid": False, "reason": f"你没有可用的{tool}。"}
 
     return validate_scene_rules(action, state)
@@ -56,12 +58,35 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
 def _is_supported_action(intent_family: str, state: GameState) -> bool:
     if intent_family in state.script.get("scene_actions", {}):
         return True
-    return any(intent_family in get_allowed_actions(entity) for entity in state.entities.values())
+    return any(
+        state.is_interactable_entity(entity_id) and intent_family in get_allowed_actions(entity)
+        for entity_id, entity in state.entities.items()
+    )
 
 
 def _requires_target(intent_family: str, state: GameState) -> bool:
     if intent_family in state.script.get("scene_actions", {}):
         return False
     return intent_family in TARGET_REQUIRED_FAMILIES or any(
-        intent_family in get_allowed_actions(entity) for entity in state.entities.values()
+        state.is_interactable_entity(entity_id) and intent_family in get_allowed_actions(entity)
+        for entity_id, entity in state.entities.items()
     )
+
+
+def _has_required_tool(tool: str, state: GameState) -> bool:
+    if tool in state.player.get("inventory", []):
+        return True
+    tool_entity_id = state.find_entity_id(tool)
+    return bool(tool_entity_id and state.is_interactable_entity(tool_entity_id))
+
+
+def _tool_matches_required(tool_id: object, required_tools: list[str], state: GameState) -> bool:
+    tool_text = str(tool_id or "")
+    if tool_text in required_tools:
+        return True
+    for required_tool in required_tools:
+        if state.find_inventory_item(required_tool) == tool_text:
+            return True
+        if state.find_entity_id(required_tool) == tool_text:
+            return True
+    return False

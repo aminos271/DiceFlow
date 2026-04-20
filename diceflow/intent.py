@@ -11,6 +11,7 @@ CANONICAL_INTENT_FAMILIES = {
     "interact",
     "open",
     "use",
+    "take",
     "attack",
     "talk",
     "wait",
@@ -20,6 +21,7 @@ CANONICAL_INTENT_FAMILIES = {
 
 LEGACY_TYPE_MAP = {
     "burn": "use",
+    "loot": "take",
 }
 
 APPROACH_TAG_KEYWORDS = {
@@ -60,7 +62,11 @@ def normalize_action(action: Action, state: Any | None = None) -> Action:
         if normalized["target"] and not normalized["target_id"]:
             normalized["target_id"] = state.find_entity_id(normalized["target"]) or ""
         if normalized["tool"] and not normalized["tool_id"]:
-            normalized["tool_id"] = state.find_inventory_item(normalized["tool"]) or normalized["tool"]
+            normalized["tool_id"] = (
+                state.find_inventory_item(normalized["tool"])
+                or state.find_entity_id(normalized["tool"])
+                or normalized["tool"]
+            )
 
     return normalized
 

@@ -6,13 +6,25 @@ from typing import Any
 from diceflow.script import Script, load_script
 
 
+ENTITY_RUNTIME_DEFAULTS = {
+    "visible": True,
+    "available": True,
+    "destroyed": False,
+    "opened": False,
+    "looted": False,
+}
+
+
 class GameState:
     def __init__(self, script: Script | None = None) -> None:
         self.script = deepcopy(script or load_script("tomb_entrance"))
         self.turn_id = 0
         self.player: dict[str, Any] = deepcopy(self.script["player"])
         self.scene: dict[str, Any] = deepcopy(self.script["scene"])
-        self.entities: dict[str, dict[str, Any]] = deepcopy(self.script["entities"])
+        self.entities: dict[str, dict[str, Any]] = {
+            entity_id: self._with_runtime_defaults(entity)
+            for entity_id, entity in deepcopy(self.script["entities"]).items()
+        }
         self.flags: dict[str, Any] = deepcopy(self.script["flags"])
         self.recent_events: list[str] = []
         self.history: list[dict[str, Any]] = []
@@ -32,16 +44,24 @@ class GameState:
             return None
 
         normalized = target.strip()
-        if normalized in self.entities:
+        if normalized in self.entities and self.is_interactable_entity(normalized):
             return normalized
 
         for entity_id, entity in self.entities.items():
+            if not self.is_interactable_entity(entity_id):
+                continue
             names = [entity.get("name", ""), *entity.get("aliases", [])]
             if normalized in names:
                 return entity_id
             if any(normalized and normalized in name for name in names):
                 return entity_id
         return None
+
+    def is_interactable_entity(self, entity_id: str) -> bool:
+        entity = self.entities.get(entity_id)
+        if not entity:
+            return False
+        return bool(entity.get("visible", True) and entity.get("available", True))
 
     def find_inventory_item(self, item: str | None) -> str | None:
         if not item:
@@ -61,6 +81,18 @@ class GameState:
         self._apply_object_changes(self.player, player_changes)
         self.player["hp"] = max(0, min(self.player["hp"], self.player["max_hp"]))
 
+        for entity_id, entity in changes.get("spawn_entities", {}).items():
+            self.entities[entity_id] = self._with_runtime_defaults(deepcopy(entity))
+
+        for entity_id in changes.get("remove_entities", []):
+            self.entities.pop(entity_id, None)
+
+        for entity_id in changes.get("reveal_entities", []):
+            entity = self.entities.get(entity_id)
+            if entity:
+                entity["visible"] = True
+                entity["available"] = True
+
         for entity_id, entity_changes in changes.get("entities", {}).items():
             entity = self.entities.get(entity_id)
             if not entity:
@@ -70,6 +102,22 @@ class GameState:
                 entity["hp"] = max(0, min(entity["hp"], entity.get("max_hp", entity["hp"])))
                 if entity["hp"] <= 0:
                     entity["alive"] = False
+
+        for entity_id, entity_changes in changes.get("set_entity_states", {}).items():
+            entity = self.entities.get(entity_id)
+            if entity:
+                self._apply_object_changes(entity, entity_changes)
+
+        for entity_id in changes.get("move_item_to_inventory", []):
+            entity = self.entities.get(entity_id)
+            if not entity or entity.get("looted"):
+                continue
+            item_name = str(entity.get("item_id") or entity.get("name") or entity_id)
+            if item_name not in self.player.setdefault("inventory", []):
+                self.player["inventory"].append(item_name)
+            entity["looted"] = True
+            entity["available"] = False
+            entity["visible"] = False
 
         for key, value in changes.get("flags", {}).items():
             self.flags[key] = value
@@ -101,6 +149,12 @@ class GameState:
                 target["inventory"] = [item for item in target.get("inventory", []) if item not in value]
             else:
                 target[key] = value
+
+    def _with_runtime_defaults(self, entity: dict[str, Any]) -> dict[str, Any]:
+        normalized = {**ENTITY_RUNTIME_DEFAULTS, **entity}
+        if normalized.get("destroyed"):
+            normalized["available"] = bool(entity.get("available", False))
+        return normalized
 
     def _refresh_end_state(self) -> None:
         for condition in self.script.get("ending_conditions", []):
