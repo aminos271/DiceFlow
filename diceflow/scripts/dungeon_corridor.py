@@ -30,7 +30,7 @@ SCRIPT = {
             "name": "骷髅守卫",
             "aliases": ["骷髅", "守卫", "敌人"],
             "metadata": {
-                "allowed_actions": ["attack", "inspect"],
+                "allowed_actions": ["attack", "use", "inspect"],
                 "actions": {
                     "attack": {
                         "dc": 11,
@@ -50,6 +50,114 @@ SCRIPT = {
                             "critical_fail": {
                                 "player": {"hp_delta": -2},
                                 "events": ["你失去平衡，被骷髅重击。"],
+                            },
+                        },
+                    },
+                    "use": {
+                        "dc": 10,
+                        "required_tools": ["木箱"],
+                        "outcomes": {
+                            "critical_success": {
+                                "entities": {"$target": {"hp_delta": -5}},
+                                "set_entity_states": {
+                                    "chest_1": {
+                                        "destroyed": True,
+                                        "available": False,
+                                        "visible": False,
+                                    }
+                                },
+                                "spawn_entities": {
+                                    "chest_debris_1": {
+                                        "name": "木箱残片",
+                                        "aliases": ["残片", "碎片", "木箱残片"],
+                                        "type": "debris",
+                                        "contents": ["iron_key"],
+                                        "metadata": {
+                                            "allowed_actions": ["take", "inspect"],
+                                            "actions": {
+                                                "take": {
+                                                    "dc": 6,
+                                                    "outcomes": {
+                                                        "success": {
+                                                            "move_item_to_inventory": ["iron_key"],
+                                                            "flags": {"has_key": True},
+                                                            "set_entity_states": {"$target": {"looted": True}},
+                                                            "events": ["你从木箱残片中翻出铁钥匙并收好。"],
+                                                        },
+                                                        "fail": {
+                                                            "events": ["碎木片遮住了钥匙，你需要再翻找一次。"],
+                                                        },
+                                                    },
+                                                },
+                                                "inspect": {
+                                                    "dc": 6,
+                                                    "outcomes": {
+                                                        "success": {
+                                                            "events": ["残片之间露出一把铁钥匙。"],
+                                                        }
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    }
+                                },
+                                "reveal_entities": ["iron_key"],
+                                "events": ["你抡起木箱砸碎骷髅，箱体裂成残片，铁钥匙从里面露了出来。"],
+                            },
+                            "success": {
+                                "entities": {"$target": {"hp_delta": -3}},
+                                "set_entity_states": {
+                                    "chest_1": {
+                                        "destroyed": True,
+                                        "available": False,
+                                        "visible": False,
+                                    }
+                                },
+                                "spawn_entities": {
+                                    "chest_debris_1": {
+                                        "name": "木箱残片",
+                                        "aliases": ["残片", "碎片", "木箱残片"],
+                                        "type": "debris",
+                                        "contents": ["iron_key"],
+                                        "metadata": {
+                                            "allowed_actions": ["take", "inspect"],
+                                            "actions": {
+                                                "take": {
+                                                    "dc": 6,
+                                                    "outcomes": {
+                                                        "success": {
+                                                            "move_item_to_inventory": ["iron_key"],
+                                                            "flags": {"has_key": True},
+                                                            "set_entity_states": {"$target": {"looted": True}},
+                                                            "events": ["你从木箱残片中翻出铁钥匙并收好。"],
+                                                        },
+                                                        "fail": {
+                                                            "events": ["碎木片遮住了钥匙，你需要再翻找一次。"],
+                                                        },
+                                                    },
+                                                },
+                                                "inspect": {
+                                                    "dc": 6,
+                                                    "outcomes": {
+                                                        "success": {
+                                                            "events": ["残片之间露出一把铁钥匙。"],
+                                                        }
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    }
+                                },
+                                "reveal_entities": ["iron_key"],
+                                "events": ["木箱砸中骷髅后碎裂，残片散开，铁钥匙暴露出来。"],
+                            },
+                            "fail": {
+                                "player": {"hp_delta": -1},
+                                "events": ["你没能抡稳木箱，骷髅趁机逼近。"],
+                            },
+                            "critical_fail": {
+                                "player": {"hp_delta": -2},
+                                "events": ["木箱脱手撞在墙上，你被骷髅重击。"],
                             },
                         },
                     },
@@ -82,14 +190,14 @@ SCRIPT = {
                         "dc": 10,
                         "outcomes": {
                             "critical_success": {
-                                "player": {"inventory_add": ["铁钥匙"]},
-                                "flags": {"has_key": True},
-                                "events": ["你轻松打开木箱，找到一把铁钥匙。"],
+                                "entities": {"$target": {"opened": True}},
+                                "reveal_entities": ["iron_key"],
+                                "events": ["你轻松打开木箱，一把铁钥匙露了出来。"],
                             },
                             "success": {
-                                "player": {"inventory_add": ["铁钥匙"]},
-                                "flags": {"has_key": True},
-                                "events": ["你打开木箱，找到一把铁钥匙。"],
+                                "entities": {"$target": {"opened": True}},
+                                "reveal_entities": ["iron_key"],
+                                "events": ["你打开木箱，看见里面有一把铁钥匙。"],
                             },
                             "fail": {
                                 "events": ["木箱卡住了，但你觉得还能再试。"],
@@ -105,6 +213,47 @@ SCRIPT = {
                         "outcomes": {
                             "success": {
                                 "events": ["你确认这个木箱可能藏有物品。"],
+                            }
+                        },
+                    },
+                },
+            },
+            "contents": ["iron_key"],
+        },
+
+        "iron_key": {
+            "name": "铁钥匙",
+            "aliases": ["钥匙", "铁钥匙"],
+            "type": "item",
+            "item_id": "铁钥匙",
+            "visible": False,
+            "available": False,
+            "metadata": {
+                "allowed_actions": ["take", "inspect"],
+                "actions": {
+                    "take": {
+                        "dc": 5,
+                        "outcomes": {
+                            "critical_success": {
+                                "move_item_to_inventory": ["$target"],
+                                "flags": {"has_key": True},
+                                "events": ["你立刻捡起铁钥匙并收好。"],
+                            },
+                            "success": {
+                                "move_item_to_inventory": ["$target"],
+                                "flags": {"has_key": True},
+                                "events": ["你拿起铁钥匙并收好。"],
+                            },
+                            "fail": {
+                                "events": ["铁钥匙卡在木缝里，你需要再试一次。"],
+                            },
+                        },
+                    },
+                    "inspect": {
+                        "dc": 5,
+                        "outcomes": {
+                            "success": {
+                                "events": ["这是一把可以开启铁门的钥匙。"],
                             }
                         },
                     },

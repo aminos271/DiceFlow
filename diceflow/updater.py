@@ -24,8 +24,25 @@ def update_state(action: Action, check: CheckResult, state: GameState) -> StateC
 
 
 def _expand_placeholders(changes: StateChanges, action: Action) -> StateChanges:
-    expanded = deepcopy(changes)
+    expanded = _replace_placeholders(deepcopy(changes), action)
     target_id = action.get("target_id")
     if target_id and "$target" in expanded.get("entities", {}):
         expanded["entities"][target_id] = expanded["entities"].pop("$target")
     return expanded
+
+
+def _replace_placeholders(value: object, action: Action) -> object:
+    if value == "$target":
+        return action.get("target_id") or "$target"
+    if isinstance(value, list):
+        return [_replace_placeholders(item, action) for item in value]
+    if isinstance(value, dict):
+        replaced = {}
+        for key, item in value.items():
+            replaced_key = str(_replace_placeholders(key, action))
+            if replaced_key == "spawn_entities":
+                replaced[replaced_key] = item
+            else:
+                replaced[replaced_key] = _replace_placeholders(item, action)
+        return replaced
+    return value

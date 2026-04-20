@@ -108,6 +108,8 @@ def heuristic_parse_intent(player_input: str) -> Action:
         tool = "铁钥匙"
     elif any(word in text for word in ["短剑", "剑"]):
         tool = "短剑"
+    elif any(word in text for word in ["木箱", "箱子"]):
+        tool = "木箱"
 
     if tool and any(word in text for word in ["用", "插", "拧", "烧", "点燃"]):
         intent_family = "use"
