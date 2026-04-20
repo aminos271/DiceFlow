@@ -17,6 +17,14 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertIn("scene_actions", script)
         self.assertIn("ending_conditions", script)
 
+    def test_load_dungeon_corridor_script(self) -> None:
+        script = load_script("dungeon_corridor")
+
+        self.assertEqual(script["id"], "dungeon_corridor")
+        self.assertIn("skeleton_1", script["entities"])
+        self.assertIn("flee", script["scene_actions"])
+        self.assertNotIn("flee", script["entities"]["skeleton_1"]["metadata"]["allowed_actions"])
+
     def test_required_entity_action_fields_exist(self) -> None:
         script = load_script("tomb_entrance")
 
