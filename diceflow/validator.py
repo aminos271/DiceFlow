@@ -33,6 +33,9 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
                 "valid": False,
                 "reason": f"{entity.get('name', target_id)}不能执行该行动：{intent_family}",
             }
+        state_result = _validate_entity_action_state(intent_family, entity)
+        if not state_result["valid"]:
+            return state_result
     elif target_id:
         action["target_id"] = target_id
 
@@ -53,6 +56,19 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
             return {"valid": False, "reason": f"你没有可用的{tool}。"}
 
     return validate_scene_rules(action, state)
+
+
+def _validate_entity_action_state(intent_family: str, entity: dict[str, object]) -> dict[str, str | bool]:
+    entity_name = str(entity.get("name") or "目标")
+
+    if entity.get("destroyed") and intent_family not in {"inspect"}:
+        return {"valid": False, "reason": f"{entity_name}已经被破坏，不能再这样做。"}
+    if intent_family == "open" and entity.get("opened"):
+        return {"valid": False, "reason": f"{entity_name}已经打开。"}
+    if intent_family == "take" and entity.get("looted"):
+        return {"valid": False, "reason": f"{entity_name}已经被拿走。"}
+
+    return {"valid": True, "reason": ""}
 
 
 def _is_supported_action(intent_family: str, state: GameState) -> bool:

@@ -22,6 +22,12 @@ class RuntimeEntitiesTest(unittest.TestCase):
         self.assertTrue(self.game.state.entities["iron_key"]["available"])
         self.assertNotIn("\u94c1\u94a5\u5319", self.game.state.player["inventory"])
 
+        reopen_chest = {"type": "open", "target": "\u6728\u7bb1", "method": "", "tool": ""}
+        reopen_result = validate(reopen_chest, self.game.state)
+
+        self.assertFalse(reopen_result["valid"])
+        self.assertIn("\u5df2\u7ecf\u6253\u5f00", reopen_result["reason"])
+
         take_key = {"type": "take", "target": "\u94c1\u94a5\u5319", "method": "", "tool": ""}
         self.assertTrue(validate(take_key, self.game.state)["valid"])
 
@@ -33,6 +39,11 @@ class RuntimeEntitiesTest(unittest.TestCase):
         self.assertFalse(self.game.state.entities["iron_key"]["visible"])
         self.assertFalse(self.game.state.entities["iron_key"]["available"])
         self.assertTrue(self.game.state.entities["iron_key"]["looted"])
+
+        take_again = {"type": "take", "target": "\u94c1\u94a5\u5319", "method": "", "tool": ""}
+        take_again_result = validate(take_again, self.game.state)
+
+        self.assertFalse(take_again_result["valid"])
 
     def test_smash_skeleton_with_chest_spawns_debris_and_key_can_be_taken(self) -> None:
         smash = {
