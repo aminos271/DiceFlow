@@ -4,6 +4,7 @@ from copy import deepcopy
 from importlib import import_module
 from typing import Any
 
+from diceflow.intent import CANONICAL_INTENT_FAMILIES
 from diceflow.models import Action
 
 
@@ -43,7 +44,7 @@ def get_allowed_actions(entity: dict[str, Any]) -> list[str]:
 
 
 def get_action_spec(action: Action, state: Any) -> dict[str, Any]:
-    action_type = str(action.get("type") or "unknown")
+    action_type = str(action.get("intent_family") or action.get("type") or "unknown")
     target_id = action.get("target_id")
     if target_id and target_id in state.entities:
         entity = state.entities[target_id]
@@ -61,6 +62,8 @@ def validate_script(script: Script) -> None:
         _validate_entity(entity_id, entity, errors)
 
     for action_type, action_spec in script.get("scene_actions", {}).items():
+        if action_type not in CANONICAL_INTENT_FAMILIES:
+            errors.append(f"scene_actions has non-canonical action: {action_type}")
         _validate_action_spec(f"scene_actions.{action_type}", action_spec, errors, has_target=False)
 
     _validate_ending_conditions(script, errors)
@@ -103,6 +106,8 @@ def _validate_entity(entity_id: str, entity: dict[str, Any], errors: list[str]) 
             errors.append(f"entities.{entity_id}.metadata.allowed_actions includes undefined action: {action_type}")
 
     for action_type, action_spec in actions.items():
+        if action_type not in CANONICAL_INTENT_FAMILIES:
+            errors.append(f"entities.{entity_id}.metadata.actions has non-canonical action: {action_type}")
         _validate_action_spec(f"entities.{entity_id}.metadata.actions.{action_type}", action_spec, errors, has_target=True)
 
 

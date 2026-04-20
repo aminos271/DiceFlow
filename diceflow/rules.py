@@ -13,7 +13,6 @@ class RuleEngine:
         self.rng = rng or random.Random()
 
     def resolve(self, action: Action, state: GameState) -> dict[str, int | str]:
-        action_type = str(action.get("type") or "unknown")
         dc = self._dc_for(action, state)
         roll = self.rng.randint(1, 20)
 

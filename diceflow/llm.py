@@ -7,6 +7,7 @@ from typing import Any
 from openai import OpenAI
 
 import config
+from diceflow.intent import canonical_family, extract_approach_tags, normalize_action
 from diceflow.models import Action, CheckResult, StateChanges
 from diceflow.state import GameState
 
@@ -96,28 +97,36 @@ def narrate(
 
 def heuristic_parse_intent(player_input: str) -> Action:
     text = player_input.strip()
-    action_type = "unknown"
+    intent_family = "unknown"
     target = ""
     method = text
     tool = ""
 
-    if any(word in text for word in ["开门", "开锁", "打开", "撬"]):
-        action_type = "open"
-    elif any(word in text for word in ["攻击", "打", "砍", "刺", "挥剑"]):
-        action_type = "attack"
-    elif any(word in text for word in ["烧", "火把", "点燃"]):
-        action_type = "burn"
+    if any(word in text for word in ["火把"]):
         tool = "火把"
+    elif any(word in text for word in ["铁钥匙", "钥匙"]):
+        tool = "铁钥匙"
+    elif any(word in text for word in ["短剑", "剑"]):
+        tool = "短剑"
+
+    if tool and any(word in text for word in ["用", "插", "拧", "烧", "点燃"]):
+        intent_family = "use"
+    elif any(word in text for word in ["开门", "开锁", "打开", "撬"]):
+        intent_family = "open"
+    elif any(word in text for word in ["攻击", "打", "砍", "刺", "挥剑"]):
+        intent_family = "attack"
+    elif any(word in text for word in ["烧", "火把", "点燃"]):
+        intent_family = "use"
     elif any(word in text for word in ["检查", "观察", "搜索", "看", "调查"]):
-        action_type = "inspect"
+        intent_family = "inspect"
     elif any(word in text for word in ["说", "问", "交涉", "威胁", "劝"]):
-        action_type = "talk"
+        intent_family = "talk"
     elif any(word in text for word in ["移动", "走", "靠近", "前往", "往", "接近", "潜行", "低调"]):
-        action_type = "move"
+        intent_family = "move"
     elif any(word in text for word in ["逃", "后退", "闪避", "躲"]):
-        action_type = "flee"
+        intent_family = "flee"
     elif any(word in text for word in ["等待", "观望", "屏息"]):
-        action_type = "wait"
+        intent_family = "wait"
 
     if any(word in text for word in ["守卫", "卫兵", "敌人", "看守"]):
         target = "守卫"
@@ -129,13 +138,21 @@ def heuristic_parse_intent(player_input: str) -> Action:
         target = "骷髅"
     elif any(word in text for word in ["左门", "石门", "门", "出口", "锁"]):
         target = "左门"
-    elif action_type in {"open", "burn"}:
+    elif intent_family in {"open", "use"}:
         target = "左门"
 
-    if any(word in text for word in ["短剑", "剑"]):
-        tool = "短剑"
-
-    return {"type": action_type, "target": target, "method": method, "tool": tool}
+    action = {
+        "intent_family": intent_family,
+        "type": intent_family,
+        "target": target,
+        "target_id": "",
+        "tool": tool,
+        "tool_id": tool,
+        "approach_tags": extract_approach_tags(method),
+        "method_text": method,
+        "method": method,
+    }
+    return action
 
 
 def fallback_narration(
@@ -161,12 +178,20 @@ def fallback_narration(
 
 
 def _normalize_action(raw: dict[str, Any]) -> Action:
-    return {
-        "type": str(raw.get("type") or "unknown").strip() or "unknown",
-        "target": str(raw.get("target") or "").strip(),
-        "method": str(raw.get("method") or "").strip(),
-        "tool": str(raw.get("tool") or "").strip(),
-    }
+    family = canonical_family(raw.get("intent_family") or raw.get("type"))
+    return normalize_action(
+        {
+            "intent_family": family,
+            "type": family,
+            "target": str(raw.get("target") or "").strip(),
+            "target_id": str(raw.get("target_id") or "").strip(),
+            "tool": str(raw.get("tool") or "").strip(),
+            "tool_id": str(raw.get("tool_id") or "").strip(),
+            "approach_tags": raw.get("approach_tags") or [],
+            "method_text": str(raw.get("method_text") or raw.get("method") or "").strip(),
+            "method": str(raw.get("method") or raw.get("method_text") or "").strip(),
+        }
+    )
 
 
 def _compact_state(state: GameState) -> dict[str, Any]:

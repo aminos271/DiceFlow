@@ -116,7 +116,7 @@ SCRIPT = {
             "name": "铁门",
             "aliases": ["门", "铁门", "出口"],
             "metadata": {
-                "allowed_actions": ["open", "inspect"],
+                "allowed_actions": ["open", "use", "inspect"],
                 "actions": {
                     "open": {
                         "dc": 12,
@@ -132,6 +132,27 @@ SCRIPT = {
                             },
                             "fail": {
                                 "events": ["钥匙卡住了，你需要再试一次。"],
+                            },
+                            "critical_fail": {
+                                "player": {"hp_delta": -1},
+                                "events": ["你用力过猛，钥匙滑脱划伤手指。"],
+                            },
+                        },
+                    },
+                    "use": {
+                        "dc": 12,
+                        "required_tools": ["铁钥匙"],
+                        "outcomes": {
+                            "critical_success": {
+                                "flags": {"door_open": True},
+                                "events": ["你低调地把铁钥匙插入锁孔，铁门顺畅打开。"],
+                            },
+                            "success": {
+                                "flags": {"door_open": True},
+                                "events": ["铁钥匙转动锁芯，铁门被打开。"],
+                            },
+                            "fail": {
+                                "events": ["钥匙卡住了，你需要调整角度再试一次。"],
                             },
                             "critical_fail": {
                                 "player": {"hp_delta": -1},

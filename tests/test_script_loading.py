@@ -60,13 +60,24 @@ class ScriptLoadingTest(unittest.TestCase):
 
     def test_validate_script_rejects_misspelled_action_field(self) -> None:
         script = load_script("tomb_entrance")
-        burn = script["entities"]["left_door"]["metadata"]["actions"]["burn"]
-        burn["required_tool"] = burn.pop("required_tools")
+        use = script["entities"]["left_door"]["metadata"]["actions"]["use"]
+        use["required_tool"] = use.pop("required_tools")
 
         with self.assertRaises(ValueError) as context:
             validate_script(script)
 
         self.assertIn("unsupported action field: required_tool", str(context.exception))
+
+    def test_validate_script_rejects_non_canonical_action_key(self) -> None:
+        script = load_script("tomb_entrance")
+        actions = script["entities"]["left_door"]["metadata"]["actions"]
+        actions["burn"] = actions.pop("use")
+        script["entities"]["left_door"]["metadata"]["allowed_actions"] = ["open", "burn", "inspect"]
+
+        with self.assertRaises(ValueError) as context:
+            validate_script(script)
+
+        self.assertIn("non-canonical action: burn", str(context.exception))
 
     def test_validate_script_rejects_invalid_ending_key(self) -> None:
         script = load_script("tomb_entrance")

@@ -43,6 +43,16 @@ class GameState:
                 return entity_id
         return None
 
+    def find_inventory_item(self, item: str | None) -> str | None:
+        if not item:
+            return None
+
+        normalized = item.strip()
+        for inventory_item in self.player.get("inventory", []):
+            if normalized == inventory_item or normalized in inventory_item or inventory_item in normalized:
+                return inventory_item
+        return None
+
     def apply_changes(self, changes: dict[str, Any]) -> None:
         if not changes:
             return

@@ -58,6 +58,38 @@ class ValidatorDataDrivenTest(unittest.TestCase):
 
         self.assertTrue(result["valid"])
 
+    def test_dungeon_corridor_use_key_on_iron_door(self) -> None:
+        game = Game(script=load_script("dungeon_corridor"), use_llm=False)
+        game.state.apply_changes({"player": {"inventory_add": ["铁钥匙"]}})
+        action = {
+            "intent_family": "use",
+            "target": "\u94c1\u95e8",
+            "tool": "\u94c1\u94a5\u5319",
+            "approach_tags": ["careful"],
+            "method_text": "\u4f4e\u8c03\u5730\u628a\u94c1\u94a5\u5319\u63d2\u8fdb\u9501\u5b54",
+        }
+
+        result = validate(action, game.state)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(action["target_id"], "iron_door")
+        self.assertEqual(action["tool_id"], "\u94c1\u94a5\u5319")
+
+    def test_use_requires_matching_tool_id(self) -> None:
+        game = Game(script=load_script("dungeon_corridor"), use_llm=False)
+        game.state.apply_changes({"player": {"inventory_add": ["铁钥匙", "短剑"]}})
+        action = {
+            "intent_family": "use",
+            "target": "\u94c1\u95e8",
+            "tool": "\u77ed\u5251",
+            "method_text": "\u7528\u77ed\u5251\u64ac\u94c1\u95e8",
+        }
+
+        result = validate(action, game.state)
+
+        self.assertFalse(result["valid"])
+        self.assertIn("\u94c1\u94a5\u5319", result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

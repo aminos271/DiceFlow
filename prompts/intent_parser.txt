@@ -3,16 +3,17 @@
 请将玩家输入解析为 JSON：
 
 {
-  "type": "",
+  "intent_family": "",
   "target": "",
-  "method": "",
-  "tool": ""
+  "tool": "",
+  "approach_tags": [],
+  "method_text": ""
 }
 
 可用行动类型：
 - attack：攻击实体
 - open：开门或开锁
-- burn：用火把灼烧
+- use：使用工具、物品、钥匙、火把等
 - inspect：检查、观察、搜索
 - talk：交涉、威胁、询问
 - move：移动、靠近、前往某处、保持潜行或低调地接近
@@ -25,3 +26,5 @@
 - 不要解释
 - target 使用玩家原文中的目标名称
 - tool 没有就输出空字符串
+- approach_tags 只能从 careful、forceful、quick 中选择；没有就输出 []
+- method_text 保留玩家行动原文或简短复述

@@ -5,7 +5,7 @@ from diceflow.state import GameState
 
 
 def validate_scene_rules(action: Action, state: GameState) -> dict[str, str | bool]:
-    action_type = str(action.get("type") or "unknown")
+    action_type = str(action.get("intent_family") or action.get("type") or "unknown")
     target_id = action.get("target_id")
 
     if action_type == "open" and target_id == "left_door":
@@ -19,7 +19,7 @@ def validate_scene_rules(action: Action, state: GameState) -> dict[str, str | bo
 
 
 def get_dc_modifier(action: Action, state: GameState) -> int:
-    action_type = str(action.get("type") or "unknown")
+    action_type = str(action.get("intent_family") or action.get("type") or "unknown")
     target_id = action.get("target_id")
     modifier = 0
 
@@ -32,4 +32,3 @@ def get_dc_modifier(action: Action, state: GameState) -> int:
             modifier -= 2
 
     return modifier
-

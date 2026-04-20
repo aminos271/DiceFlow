@@ -101,7 +101,7 @@ SCRIPT = {
             "name": "左门",
             "aliases": ["左门", "门", "石门", "出口"],
             "metadata": {
-                "allowed_actions": ["open", "burn", "inspect"],
+                "allowed_actions": ["open", "use", "inspect"],
                 "actions": {
                     "open": {
                         "dc": 14,
@@ -128,7 +128,7 @@ SCRIPT = {
                             },
                         },
                     },
-                    "burn": {
+                    "use": {
                         "dc": 10,
                         "required_tools": ["火把"],
                         "outcomes": {
