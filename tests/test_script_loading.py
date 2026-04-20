@@ -25,6 +25,22 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertIn("flee", script["scene_actions"])
         self.assertNotIn("flee", script["entities"]["skeleton_1"]["metadata"]["allowed_actions"])
 
+    def test_dungeon_corridor_entities_are_archetype_materialized(self) -> None:
+        script = load_script("dungeon_corridor")
+
+        chest = script["entities"]["chest_1"]
+        key = script["entities"]["iron_key"]
+        door = script["entities"]["iron_door"]
+
+        self.assertEqual(chest["type"], "container")
+        self.assertIn("open", chest["metadata"]["actions"])
+        self.assertEqual(chest["metadata"]["actions"]["open"]["outcomes"]["success"]["reveal_entities"], ["iron_key"])
+        self.assertEqual(key["type"], "pickup")
+        self.assertIn("take", key["metadata"]["actions"])
+        self.assertEqual(key["metadata"]["actions"]["take"]["outcomes"]["success"]["flags"], {"has_key": True})
+        self.assertEqual(door["type"], "door")
+        self.assertEqual(door["metadata"]["actions"]["open"]["required_tools"], ["\u94c1\u94a5\u5319"])
+
     def test_required_entity_action_fields_exist(self) -> None:
         script = load_script("tomb_entrance")
 

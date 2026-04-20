@@ -70,7 +70,7 @@ SCRIPT = {
                                     "chest_debris_1": {
                                         "name": "木箱残片",
                                         "aliases": ["残片", "碎片", "木箱残片"],
-                                        "type": "debris",
+                                        "type": "container",
                                         "contents": ["iron_key"],
                                         "metadata": {
                                             "allowed_actions": ["take", "inspect"],
@@ -117,7 +117,7 @@ SCRIPT = {
                                     "chest_debris_1": {
                                         "name": "木箱残片",
                                         "aliases": ["残片", "碎片", "木箱残片"],
-                                        "type": "debris",
+                                        "type": "container",
                                         "contents": ["iron_key"],
                                         "metadata": {
                                             "allowed_actions": ["take", "inspect"],
@@ -183,40 +183,13 @@ SCRIPT = {
         "chest_1": {
             "name": "木箱",
             "aliases": ["箱子", "木箱"],
-            "metadata": {
-                "allowed_actions": ["open", "inspect"],
-                "actions": {
-                    "open": {
-                        "dc": 10,
-                        "outcomes": {
-                            "critical_success": {
-                                "entities": {"$target": {"opened": True}},
-                                "reveal_entities": ["iron_key"],
-                                "events": ["你轻松打开木箱，一把铁钥匙露了出来。"],
-                            },
-                            "success": {
-                                "entities": {"$target": {"opened": True}},
-                                "reveal_entities": ["iron_key"],
-                                "events": ["你打开木箱，看见里面有一把铁钥匙。"],
-                            },
-                            "fail": {
-                                "events": ["木箱卡住了，但你觉得还能再试。"],
-                            },
-                            "critical_fail": {
-                                "player": {"hp_delta": -1},
-                                "events": ["木箱突然崩裂碎片划伤你。"],
-                            },
-                        },
-                    },
-                    "inspect": {
-                        "dc": 8,
-                        "outcomes": {
-                            "success": {
-                                "events": ["你确认这个木箱可能藏有物品。"],
-                            }
-                        },
-                    },
-                },
+            "type": "container",
+            "hooks": {
+                "open_critical_success_events": ["你轻松打开木箱，一把铁钥匙露了出来。"],
+                "open_success_events": ["你打开木箱，看见里面有一把铁钥匙。"],
+                "open_fail_events": ["木箱卡住了，但你觉得还能再试。"],
+                "open_critical_fail_events": ["木箱突然崩裂碎片划伤你。"],
+                "inspect_success_events": ["你确认这个木箱可能藏有物品。"],
             },
             "contents": ["iron_key"],
         },
@@ -224,100 +197,34 @@ SCRIPT = {
         "iron_key": {
             "name": "铁钥匙",
             "aliases": ["钥匙", "铁钥匙"],
-            "type": "item",
+            "type": "pickup",
             "item_id": "铁钥匙",
             "visible": False,
             "available": False,
-            "metadata": {
-                "allowed_actions": ["take", "inspect"],
-                "actions": {
-                    "take": {
-                        "dc": 5,
-                        "outcomes": {
-                            "critical_success": {
-                                "move_item_to_inventory": ["$target"],
-                                "flags": {"has_key": True},
-                                "events": ["你立刻捡起铁钥匙并收好。"],
-                            },
-                            "success": {
-                                "move_item_to_inventory": ["$target"],
-                                "flags": {"has_key": True},
-                                "events": ["你拿起铁钥匙并收好。"],
-                            },
-                            "fail": {
-                                "events": ["铁钥匙卡在木缝里，你需要再试一次。"],
-                            },
-                        },
-                    },
-                    "inspect": {
-                        "dc": 5,
-                        "outcomes": {
-                            "success": {
-                                "events": ["这是一把可以开启铁门的钥匙。"],
-                            }
-                        },
-                    },
-                },
+            "hooks": {
+                "take_flags": {"has_key": True},
+                "take_critical_success_events": ["你立刻捡起铁钥匙并收好。"],
+                "take_success_events": ["你拿起铁钥匙并收好。"],
+                "take_fail_events": ["铁钥匙卡在木缝里，你需要再试一次。"],
+                "inspect_success_events": ["这是一把可以开启铁门的钥匙。"],
             },
         },
 
         "iron_door": {
             "name": "铁门",
             "aliases": ["门", "铁门", "出口"],
-            "metadata": {
-                "allowed_actions": ["open", "use", "inspect"],
-                "actions": {
-                    "open": {
-                        "dc": 12,
-                        "required_tools": ["铁钥匙"],
-                        "outcomes": {
-                            "critical_success": {
-                                "flags": {"door_open": True},
-                                "events": ["铁门被你顺利打开，出口就在眼前。"],
-                            },
-                            "success": {
-                                "flags": {"door_open": True},
-                                "events": ["铁门被打开，你看到了出口。"],
-                            },
-                            "fail": {
-                                "events": ["钥匙卡住了，你需要再试一次。"],
-                            },
-                            "critical_fail": {
-                                "player": {"hp_delta": -1},
-                                "events": ["你用力过猛，钥匙滑脱划伤手指。"],
-                            },
-                        },
-                    },
-                    "use": {
-                        "dc": 12,
-                        "required_tools": ["铁钥匙"],
-                        "outcomes": {
-                            "critical_success": {
-                                "flags": {"door_open": True},
-                                "events": ["你低调地把铁钥匙插入锁孔，铁门顺畅打开。"],
-                            },
-                            "success": {
-                                "flags": {"door_open": True},
-                                "events": ["铁钥匙转动锁芯，铁门被打开。"],
-                            },
-                            "fail": {
-                                "events": ["钥匙卡住了，你需要调整角度再试一次。"],
-                            },
-                            "critical_fail": {
-                                "player": {"hp_delta": -1},
-                                "events": ["你用力过猛，钥匙滑脱划伤手指。"],
-                            },
-                        },
-                    },
-                    "inspect": {
-                        "dc": 8,
-                        "outcomes": {
-                            "success": {
-                                "events": ["这是一扇厚重铁门，需要钥匙才能打开。"],
-                            }
-                        },
-                    },
-                },
+            "type": "door",
+            "hooks": {
+                "required_tools": ["铁钥匙"],
+                "open_critical_success_events": ["铁门被你顺利打开，出口就在眼前。"],
+                "open_success_events": ["铁门被打开，你看到了出口。"],
+                "open_fail_events": ["钥匙卡住了，你需要再试一次。"],
+                "open_critical_fail_events": ["你用力过猛，钥匙滑脱划伤手指。"],
+                "use_critical_success_events": ["你低调地把铁钥匙插入锁孔，铁门顺畅打开。"],
+                "use_success_events": ["铁钥匙转动锁芯，铁门被打开。"],
+                "use_fail_events": ["钥匙卡住了，你需要调整角度再试一次。"],
+                "use_critical_fail_events": ["你用力过猛，钥匙滑脱划伤手指。"],
+                "inspect_success_events": ["这是一扇厚重铁门，需要钥匙才能打开。"],
             },
             "locked": True,
         },

@@ -3,16 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from diceflow.script import Script, load_script
-
-
-ENTITY_RUNTIME_DEFAULTS = {
-    "visible": True,
-    "available": True,
-    "destroyed": False,
-    "opened": False,
-    "looted": False,
-}
+from diceflow.script import ENTITY_RUNTIME_DEFAULTS, Script, load_script, materialize_entity
 
 
 class GameState:
@@ -82,7 +73,7 @@ class GameState:
         self.player["hp"] = max(0, min(self.player["hp"], self.player["max_hp"]))
 
         for entity_id, entity in changes.get("spawn_entities", {}).items():
-            self.entities[entity_id] = self._with_runtime_defaults(deepcopy(entity))
+            self.entities[entity_id] = self._with_runtime_defaults(materialize_entity(entity, entity_id))
 
         for entity_id in changes.get("remove_entities", []):
             self.entities.pop(entity_id, None)
