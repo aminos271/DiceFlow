@@ -16,10 +16,11 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
 
     target = action.get("target")
     target_id = state.find_entity_id(str(target)) if target else None
+    is_scene_action = action_type in state.script.get("scene_actions", {})
     if _requires_target(action_type, state) and not target_id:
         return {"valid": False, "reason": f"目标不存在或不明确：{target or '未提供'}"}
 
-    if target_id:
+    if target_id and not is_scene_action:
         action["target_id"] = target_id
         entity = state.entities[target_id]
         allowed_actions = get_allowed_actions(entity)
@@ -28,6 +29,8 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
                 "valid": False,
                 "reason": f"{entity.get('name', target_id)}不能执行该行动：{action_type}",
             }
+    elif target_id:
+        action["target_id"] = target_id
 
     action_spec = get_action_spec(action, state)
 

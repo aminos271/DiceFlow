@@ -112,6 +112,8 @@ def heuristic_parse_intent(player_input: str) -> Action:
         action_type = "inspect"
     elif any(word in text for word in ["说", "问", "交涉", "威胁", "劝"]):
         action_type = "talk"
+    elif any(word in text for word in ["移动", "走", "靠近", "前往", "往", "接近", "潜行", "低调"]):
+        action_type = "move"
     elif any(word in text for word in ["逃", "后退", "闪避", "躲"]):
         action_type = "flee"
     elif any(word in text for word in ["等待", "观望", "屏息"]):
@@ -119,6 +121,12 @@ def heuristic_parse_intent(player_input: str) -> Action:
 
     if any(word in text for word in ["守卫", "卫兵", "敌人", "看守"]):
         target = "守卫"
+    elif any(word in text for word in ["铁门"]):
+        target = "铁门"
+    elif any(word in text for word in ["木箱", "箱子"]):
+        target = "木箱"
+    elif any(word in text for word in ["骷髅"]):
+        target = "骷髅"
     elif any(word in text for word in ["左门", "石门", "门", "出口", "锁"]):
         target = "左门"
     elif action_type in {"open", "burn"}:

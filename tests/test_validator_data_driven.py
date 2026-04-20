@@ -1,6 +1,7 @@
 import unittest
 
 from diceflow.game import Game
+from diceflow.script import load_script
 from diceflow.validator import validate
 
 
@@ -41,7 +42,22 @@ class ValidatorDataDrivenTest(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertIn("\u76ee\u6807", result["reason"])
 
+    def test_dungeon_corridor_allows_scene_move(self) -> None:
+        game = Game(script=load_script("dungeon_corridor"), use_llm=False)
+        action = {"type": "move", "target": "\u94c1\u95e8", "method": "\u5f80\u94c1\u95e8\u79fb\u52a8", "tool": ""}
+
+        result = validate(action, game.state)
+
+        self.assertTrue(result["valid"])
+
+    def test_dungeon_corridor_allows_unknown_fallback(self) -> None:
+        game = Game(script=load_script("dungeon_corridor"), use_llm=False)
+        action = {"type": "unknown", "target": "", "method": "", "tool": ""}
+
+        result = validate(action, game.state)
+
+        self.assertTrue(result["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

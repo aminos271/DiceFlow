@@ -154,6 +154,24 @@ SCRIPT = {
     },
 
     "scene_actions": {
+        "move": {
+            "dc": 9,
+            "outcomes": {
+                "critical_success": {
+                    "events": ["你贴着墙根无声前进，靠近铁门时没有惊动骷髅。"],
+                },
+                "success": {
+                    "events": ["你压低脚步向铁门移动，仍保持着与骷髅的距离。"],
+                },
+                "fail": {
+                    "events": ["你靠近了铁门，但脚步声让骷髅转向你的方向。"],
+                },
+                "critical_fail": {
+                    "player": {"hp_delta": -1},
+                    "events": ["你踩到松动石块，骷髅立刻逼近并擦伤了你。"],
+                },
+            },
+        },
         "flee": {
             "dc": 10,
             "outcomes": {
@@ -172,6 +190,25 @@ SCRIPT = {
                 "success": {
                     "events": ["你稳定呼吸，观察局势。"],
                 }
+            },
+        },
+        "unknown": {
+            "dc": 12,
+            "outcomes": {
+                "critical_success": {
+                    "events": ["你短暂迟疑后重新掌握节奏，局势仍向前推进。"],
+                },
+                "success": {
+                    "events": ["你调整姿态，谨慎地观察走廊中的威胁。"],
+                },
+                "fail": {
+                    "player": {"hp_delta": -1},
+                    "events": ["迟疑让骷髅靠近，你被迫后退并擦伤。"],
+                },
+                "critical_fail": {
+                    "player": {"hp_delta": -2},
+                    "events": ["你判断失误，骷髅抢先压上来重击了你。"],
+                },
             },
         },
     },

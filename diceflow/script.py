@@ -47,7 +47,9 @@ def get_action_spec(action: Action, state: Any) -> dict[str, Any]:
     target_id = action.get("target_id")
     if target_id and target_id in state.entities:
         entity = state.entities[target_id]
-        return get_entity_action(state.script, entity, action_type)
+        entity_action = get_entity_action(state.script, entity, action_type)
+        if entity_action:
+            return entity_action
     return state.script.get("scene_actions", {}).get(action_type, {})
 
 
