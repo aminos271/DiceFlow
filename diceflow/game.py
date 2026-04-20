@@ -6,14 +6,16 @@ from typing import Any
 from diceflow.llm import LLMClient, narrate, parse_intent
 from diceflow.models import TurnRecord
 from diceflow.rules import RuleEngine
+from diceflow.script import Script, load_script
 from diceflow.state import GameState
 from diceflow.updater import update_state
 from diceflow.validator import validate
 
 
 class Game:
-    def __init__(self, use_llm: bool = True) -> None:
-        self.state = GameState()
+    def __init__(self, script: Script | None = None, use_llm: bool = True) -> None:
+        self.script = script or load_script("tomb_entrance")
+        self.state = GameState(self.script)
         self.rules = RuleEngine()
         self.llm = self._build_llm() if use_llm else None
 
@@ -24,7 +26,10 @@ class Game:
 
         if not validation["valid"]:
             changes = {
-                "events": [str(validation["reason"]), "行动没有成立，但局势没有停下，守卫继续压迫你的空间。"],
+                "events": [
+                    str(validation["reason"]),
+                    str(self.script.get("invalid_action_event", "行动没有成立，但局势仍在推进。")),
+                ],
             }
             self.state.apply_changes(changes)
             record = TurnRecord(
@@ -67,13 +72,13 @@ class Game:
 
 
 def print_intro(state: GameState) -> None:
-    print("DiceFlow MVP：20 轮内逃出古墓。输入 q/quit/退出 结束。")
+    print(state.script.get("intro", "DiceFlow MVP。输入 q/quit/退出 结束。"))
     print(state.scene["description"])
     print(f"HP: {state.player['hp']}/{state.player['max_hp']}  物品: {'、'.join(state.player['inventory'])}")
 
 
-def run_cli(use_llm: bool = True, debug: bool = True) -> None:
-    game = Game(use_llm=use_llm)
+def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: bool = True) -> None:
+    game = Game(script=load_script(script_name), use_llm=use_llm)
     print_intro(game.state)
 
     while not game.state.flags.get("game_over"):

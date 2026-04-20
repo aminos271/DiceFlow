@@ -3,51 +3,17 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.script import Script, load_script
+
 
 class GameState:
-    def __init__(self) -> None:
+    def __init__(self, script: Script | None = None) -> None:
+        self.script = deepcopy(script or load_script("tomb_entrance"))
         self.turn_id = 0
-        self.player: dict[str, Any] = {
-            "hp": 10,
-            "max_hp": 10,
-            "inventory": ["短剑", "火把"],
-            "location": "古墓入口",
-        }
-        self.scene: dict[str, Any] = {
-            "name": "古墓入口",
-            "description": "昏暗石室里潮气很重。一个守卫挡在左门前，门缝里透出微弱冷光。",
-        }
-        self.entities: dict[str, dict[str, Any]] = {
-            "guard_1": {
-                "name": "守卫",
-                "aliases": ["守卫", "卫兵", "敌人", "看守"],
-                "metadata": {
-                    "allowed_actions": ["attack", "talk", "inspect", "flee", "wait"],
-                },
-                "hp": 6,
-                "max_hp": 6,
-                "alive": True,
-                "location": "入口",
-                "hostile": True,
-            },
-            "left_door": {
-                "name": "左门",
-                "aliases": ["左门", "门", "石门", "出口"],
-                "metadata": {
-                    "allowed_actions": ["open", "burn", "inspect", "flee", "wait"],
-                },
-                "type": "door",
-                "locked": True,
-                "burnable": True,
-                "weakened": False,
-            },
-        }
-        self.flags: dict[str, Any] = {
-            "found_exit": False,
-            "door_open": False,
-            "game_over": False,
-            "ending": "",
-        }
+        self.player: dict[str, Any] = deepcopy(self.script["player"])
+        self.scene: dict[str, Any] = deepcopy(self.script["scene"])
+        self.entities: dict[str, dict[str, Any]] = deepcopy(self.script["entities"])
+        self.flags: dict[str, Any] = deepcopy(self.script["flags"])
         self.recent_events: list[str] = []
         self.history: list[dict[str, Any]] = []
 
@@ -127,15 +93,25 @@ class GameState:
                 target[key] = value
 
     def _refresh_end_state(self) -> None:
-        guard_alive = self.entities["guard_1"].get("alive", False)
-        door_open = bool(self.flags.get("door_open"))
+        for condition in self.script.get("ending_conditions", []):
+            if self._matches_ending_condition(condition.get("when", {})):
+                self.flags["game_over"] = True
+                self.flags["ending"] = condition["ending"]
+                return
 
-        if self.player["hp"] <= 0:
-            self.flags["game_over"] = True
-            self.flags["ending"] = "death"
-        elif door_open and not guard_alive:
-            self.flags["game_over"] = True
-            self.flags["ending"] = "victory"
-        elif self.turn_id >= 20:
-            self.flags["game_over"] = True
-            self.flags["ending"] = "timeout"
+    def _matches_ending_condition(self, when: dict[str, Any]) -> bool:
+        if "player_hp_lte" in when and self.player["hp"] > when["player_hp_lte"]:
+            return False
+        if "turn_id_gte" in when and self.turn_id < when["turn_id_gte"]:
+            return False
+
+        for flag, expected in when.get("flags", {}).items():
+            if self.flags.get(flag) != expected:
+                return False
+
+        for entity_id, expected_values in when.get("entities", {}).items():
+            entity = self.entities.get(entity_id, {})
+            for key, expected in expected_values.items():
+                if entity.get(key) != expected:
+                    return False
+        return True
