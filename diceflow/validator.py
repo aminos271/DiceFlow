@@ -21,18 +21,19 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
 
     if target_id:
         action["target_id"] = target_id
+        entity = state.entities[target_id]
+        allowed_actions = entity.get("metadata", {}).get("allowed_actions", [])
+        if action_type not in allowed_actions:
+            return {
+                "valid": False,
+                "reason": f"{entity.get('name', target_id)}不能执行该行动：{action_type}",
+            }
 
     if action_type == "attack":
-        if target_id == "left_door":
-            return {"valid": False, "reason": "这扇石门不能用普通攻击解决，可以尝试开门、检查或用火把灼烧门锁。"}
         if not state.entities[target_id].get("alive", True):
             return {"valid": False, "reason": "目标已经失去威胁。"}
-
-    if action_type == "open" and target_id != "left_door":
-        return {"valid": False, "reason": "这里只有左门可以打开。"}
 
     if action_type == "burn" and "火把" not in state.player.get("inventory", []):
         return {"valid": False, "reason": "你没有可用的火把。"}
 
     return {"valid": True, "reason": ""}
-

@@ -21,6 +21,9 @@ class GameState:
             "guard_1": {
                 "name": "守卫",
                 "aliases": ["守卫", "卫兵", "敌人", "看守"],
+                "metadata": {
+                    "allowed_actions": ["attack", "talk", "inspect", "flee", "wait"],
+                },
                 "hp": 6,
                 "max_hp": 6,
                 "alive": True,
@@ -30,6 +33,9 @@ class GameState:
             "left_door": {
                 "name": "左门",
                 "aliases": ["左门", "门", "石门", "出口"],
+                "metadata": {
+                    "allowed_actions": ["open", "burn", "inspect", "flee", "wait"],
+                },
                 "type": "door",
                 "locked": True,
                 "burnable": True,
@@ -133,4 +139,3 @@ class GameState:
         elif self.turn_id >= 20:
             self.flags["game_over"] = True
             self.flags["ending"] = "timeout"
-

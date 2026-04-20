@@ -3,6 +3,7 @@ import unittest
 
 from diceflow.game import Game
 from diceflow.rules import RuleEngine
+from diceflow.validator import validate
 
 
 class GameLoopTest(unittest.TestCase):
@@ -36,7 +37,15 @@ class GameLoopTest(unittest.TestCase):
         self.assertTrue(game.state.flags["game_over"])
         self.assertEqual(game.state.flags["ending"], "victory")
 
+    def test_validator_uses_entity_allowed_actions(self) -> None:
+        game = Game(use_llm=False)
+
+        attack_door = {"type": "attack", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        open_guard = {"type": "open", "target": "\u5b88\u536b", "method": "", "tool": ""}
+
+        self.assertFalse(validate(attack_door, game.state)["valid"])
+        self.assertFalse(validate(open_guard, game.state)["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
-
