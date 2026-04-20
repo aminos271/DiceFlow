@@ -3,13 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 
 from diceflow.models import Action, CheckResult, StateChanges
-from diceflow.script import get_action_spec
+from diceflow.script import resolve_action_spec
 from diceflow.state import GameState
 
 
 def update_state(action: Action, check: CheckResult, state: GameState) -> StateChanges:
     result = str(check.get("result"))
-    action_spec = get_action_spec(action, state)
+    action_spec = resolve_action_spec(action, state)
     outcomes = action_spec.get("outcomes", {})
 
     if result in outcomes:

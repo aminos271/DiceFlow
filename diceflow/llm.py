@@ -113,10 +113,16 @@ def heuristic_parse_intent(player_input: str) -> Action:
         intent_family = "use"
     elif any(word in text for word in ["开门", "开锁", "打开", "撬"]):
         intent_family = "open"
+    elif any(word in text for word in ["推动", "推开", "拉开"]) and any(word in text for word in ["门", "箱"]):
+        intent_family = "open"
+    elif any(word in text for word in ["拨弄", "摆弄"]) and any(word in text for word in ["锁", "锁扣", "箱"]):
+        intent_family = "open"
     elif any(word in text for word in ["攻击", "打", "砍", "刺", "挥剑"]):
         intent_family = "attack"
     elif any(word in text for word in ["烧", "火把", "点燃"]):
         intent_family = "use"
+    elif any(word in text for word in ["拨弄", "摆弄", "推动", "拉动", "触碰", "按下"]):
+        intent_family = "interact"
     elif any(word in text for word in ["检查", "观察", "搜索", "看", "调查"]):
         intent_family = "inspect"
     elif any(word in text for word in ["说", "问", "交涉", "威胁", "劝"]):

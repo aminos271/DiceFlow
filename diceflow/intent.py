@@ -37,6 +37,10 @@ def canonical_family(value: str | None) -> str:
     return "unknown"
 
 
+def action_family(action: Action) -> str:
+    return canonical_family(action.get("intent_family") or action.get("type"))
+
+
 def normalize_action(action: Action, state: Any | None = None) -> Action:
     method_text = str(action.get("method_text") or action.get("method") or "").strip()
     family = canonical_family(action.get("intent_family") or action.get("type"))
@@ -67,4 +71,3 @@ def extract_approach_tags(text: str) -> list[str]:
         if any(keyword in text for keyword in keywords):
             tags.append(tag)
     return tags
-

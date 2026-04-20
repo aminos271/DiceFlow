@@ -4,7 +4,7 @@ from copy import deepcopy
 from importlib import import_module
 from typing import Any
 
-from diceflow.intent import CANONICAL_INTENT_FAMILIES
+from diceflow.intent import CANONICAL_INTENT_FAMILIES, action_family
 from diceflow.models import Action
 
 
@@ -43,15 +43,33 @@ def get_allowed_actions(entity: dict[str, Any]) -> list[str]:
     return list(metadata.get("actions", {}).keys())
 
 
-def get_action_spec(action: Action, state: Any) -> dict[str, Any]:
-    action_type = str(action.get("intent_family") or action.get("type") or "unknown")
-    target_id = action.get("target_id")
+def resolve_action_spec(action: Action, state: Any) -> dict[str, Any]:
+    action_type = action_family(action)
+    target_id = str(action.get("target_id") or "")
+    tool_id = str(action.get("tool_id") or "")
+    scope = "scene"
+    action_spec: dict[str, Any] = {}
+
     if target_id and target_id in state.entities:
         entity = state.entities[target_id]
         entity_action = get_entity_action(state.script, entity, action_type)
         if entity_action:
-            return entity_action
-    return state.script.get("scene_actions", {}).get(action_type, {})
+            scope = "entity"
+            action_spec = entity_action
+    if not action_spec:
+        action_spec = state.script.get("scene_actions", {}).get(action_type, {})
+
+    return {
+        **action_spec,
+        "intent_family": action_type,
+        "scope": scope,
+        "target_id": target_id,
+        "tool_id": tool_id,
+    }
+
+
+def get_action_spec(action: Action, state: Any) -> dict[str, Any]:
+    return resolve_action_spec(action, state)
 
 
 def validate_script(script: Script) -> None:

@@ -37,7 +37,32 @@ class SceneRulesTest(unittest.TestCase):
 
         self.assertEqual(non_hostile_dc, hostile_dc - 2)
 
+    def test_approach_tags_modify_dc(self) -> None:
+        self.game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
+        normal_action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        careful_action = {
+            "type": "open",
+            "target": "\u5de6\u95e8",
+            "method": "\u5c0f\u5fc3\u5f00\u95e8",
+            "tool": "",
+            "approach_tags": ["careful"],
+        }
+        quick_action = {
+            "type": "open",
+            "target": "\u5de6\u95e8",
+            "method": "\u7acb\u523b\u5f00\u95e8",
+            "tool": "",
+            "approach_tags": ["quick"],
+        }
+        self.assertTrue(validate(normal_action, self.game.state)["valid"])
+        self.assertTrue(validate(careful_action, self.game.state)["valid"])
+        self.assertTrue(validate(quick_action, self.game.state)["valid"])
+
+        normal_dc = self.game.rules._dc_for(normal_action, self.game.state)
+
+        self.assertEqual(self.game.rules._dc_for(careful_action, self.game.state), normal_dc - 1)
+        self.assertEqual(self.game.rules._dc_for(quick_action, self.game.state), normal_dc + 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-

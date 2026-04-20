@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from diceflow.intent import normalize_action
+from diceflow.intent import action_family, normalize_action
 from diceflow.models import Action
-from diceflow.script import get_action_spec, get_allowed_actions
+from diceflow.script import get_allowed_actions, resolve_action_spec
 from diceflow.script_rules import validate_scene_rules
 from diceflow.state import GameState
 
@@ -12,7 +12,7 @@ TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "talk"}
 
 def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     action.update(normalize_action(action, state))
-    intent_family = str(action.get("intent_family") or "unknown")
+    intent_family = action_family(action)
     if not _is_supported_action(intent_family, state):
         return {"valid": False, "reason": f"暂不支持行动类型：{intent_family}"}
 
@@ -34,7 +34,7 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     elif target_id:
         action["target_id"] = target_id
 
-    action_spec = get_action_spec(action, state)
+    action_spec = resolve_action_spec(action, state)
 
     if intent_family == "attack":
         if not state.entities[target_id].get("alive", True):

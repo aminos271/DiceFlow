@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 
 from diceflow.models import Action
-from diceflow.script import get_action_spec
+from diceflow.script import resolve_action_spec
 from diceflow.script_rules import get_dc_modifier
 from diceflow.state import GameState
 
@@ -28,7 +28,7 @@ class RuleEngine:
         return {"dc": dc, "roll": roll, "result": result}
 
     def _dc_for(self, action: Action, state: GameState) -> int:
-        action_spec = get_action_spec(action, state)
+        action_spec = resolve_action_spec(action, state)
         dc = int(action_spec.get("dc", 12))
         dc += get_dc_modifier(action, state)
         return max(5, dc)

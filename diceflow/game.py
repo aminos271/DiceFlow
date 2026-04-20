@@ -115,7 +115,7 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
 
 
 def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[str, Any]) -> str:
-    action_type = action.get("type", "unknown")
+    action_type = action.get("intent_family", "unknown")
     target = action.get("target") or action.get("target_id") or "当前局势"
     result = check.get("result", "unknown")
     event = "；".join(changes.get("events", []))

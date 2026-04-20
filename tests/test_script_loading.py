@@ -1,7 +1,7 @@
 import unittest
 
 from diceflow.game import Game
-from diceflow.script import get_action_spec, load_script, validate_script
+from diceflow.script import get_action_spec, load_script, resolve_action_spec, validate_script
 from diceflow.validator import validate
 
 
@@ -108,6 +108,26 @@ class ScriptLoadingTest(unittest.TestCase):
 
         self.assertEqual(action_spec["dc"], 10)
         self.assertIn("flags", action_spec["outcomes"]["success"])
+
+    def test_resolved_action_spec_includes_normalized_context(self) -> None:
+        game = Game(script=load_script("dungeon_corridor"), use_llm=False)
+        game.state.apply_changes({"player": {"inventory_add": ["\u94c1\u94a5\u5319"]}})
+        action = {
+            "type": "burn",
+            "target": "\u94c1\u95e8",
+            "tool": "\u94c1\u94a5\u5319",
+            "method_text": "\u7528\u94c1\u94a5\u5319\u5f00\u94c1\u95e8",
+        }
+        self.assertTrue(validate(action, game.state)["valid"])
+
+        action_spec = resolve_action_spec(action, game.state)
+
+        self.assertEqual(action_spec["intent_family"], "use")
+        self.assertEqual(action_spec["scope"], "entity")
+        self.assertEqual(action_spec["target_id"], "iron_door")
+        self.assertEqual(action_spec["tool_id"], "\u94c1\u94a5\u5319")
+        self.assertEqual(action_spec["dc"], 12)
+        self.assertEqual(action_spec["required_tools"], ["\u94c1\u94a5\u5319"])
 
     def test_action_spec_uses_scene_action_without_target(self) -> None:
         game = Game(use_llm=False)
