@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 
 from diceflow.models import Action
-from diceflow.script import get_entity_action
+from diceflow.script import get_action_spec
 from diceflow.script_rules import get_dc_modifier
 from diceflow.state import GameState
 
@@ -29,15 +29,7 @@ class RuleEngine:
         return {"dc": dc, "roll": roll, "result": result}
 
     def _dc_for(self, action: Action, state: GameState) -> int:
-        action_type = str(action.get("type") or "unknown")
-        action_def = self._get_action_def(action, state)
-        dc = int(action_def.get("dc", 12))
+        action_spec = get_action_spec(action, state)
+        dc = int(action_spec.get("dc", 12))
         dc += get_dc_modifier(action, state)
         return max(5, dc)
-
-    def _get_action_def(self, action: Action, state: GameState) -> dict[str, object]:
-        action_type = str(action.get("type") or "unknown")
-        target_id = action.get("target_id")
-        if target_id and target_id in state.entities:
-            return get_entity_action(state.script, state.entities[target_id], action_type)
-        return state.script.get("scene_actions", {}).get(action_type, {})

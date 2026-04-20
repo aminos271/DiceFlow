@@ -27,7 +27,7 @@ SCRIPT = {
             "name": "守卫",
             "aliases": ["守卫", "卫兵", "敌人", "看守"],
             "metadata": {
-                "allowed_actions": ["attack", "talk", "inspect", "flee", "wait"],
+                "allowed_actions": ["attack", "talk", "inspect"],
                 "actions": {
                     "attack": {
                         "dc": 12,
@@ -101,7 +101,7 @@ SCRIPT = {
             "name": "左门",
             "aliases": ["左门", "门", "石门", "出口"],
             "metadata": {
-                "allowed_actions": ["open", "burn", "inspect", "flee", "wait"],
+                "allowed_actions": ["open", "burn", "inspect"],
                 "actions": {
                     "open": {
                         "dc": 14,

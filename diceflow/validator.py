@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from diceflow.models import Action
-from diceflow.script import get_allowed_actions, get_entity_action
+from diceflow.script import get_action_spec, get_allowed_actions
 from diceflow.script_rules import validate_scene_rules
 from diceflow.state import GameState
 
@@ -28,15 +28,14 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
                 "valid": False,
                 "reason": f"{entity.get('name', target_id)}不能执行该行动：{action_type}",
             }
-        action_def = get_entity_action(state.script, entity, action_type)
-    else:
-        action_def = state.script.get("scene_actions", {}).get(action_type, {})
+
+    action_spec = get_action_spec(action, state)
 
     if action_type == "attack":
         if not state.entities[target_id].get("alive", True):
             return {"valid": False, "reason": "目标已经失去威胁。"}
 
-    for tool in action_def.get("required_tools", []):
+    for tool in action_spec.get("required_tools", []):
         if tool not in state.player.get("inventory", []):
             return {"valid": False, "reason": f"你没有可用的{tool}。"}
 
