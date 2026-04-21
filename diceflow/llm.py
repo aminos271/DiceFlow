@@ -13,6 +13,19 @@ from diceflow.state import GameState
 
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
+LLM_RETRY_ATTEMPTS = 2
+USE_VERBS = ["用", "插", "拧", "烧", "点燃"]
+ACTION_KEYWORDS = {
+    "open": ["open", "开门", "开锁", "打开", "撬"],
+    "attack": ["attack", "攻击", "打", "砍", "刺", "挥剑", "砸"],
+    "take": ["take", "loot", "拿", "捡", "拾取", "取出", "翻找"],
+    "interact": ["interact", "拨弄", "摆弄", "推动", "拉动", "触碰", "按下"],
+    "inspect": ["inspect", "检查", "观察", "搜索", "看", "调查"],
+    "talk": ["talk", "说", "问", "交涉", "威胁", "劝"],
+    "move": ["move", "移动", "走", "靠近", "前往", "往", "接近", "潜行", "低调"],
+    "flee": ["flee", "逃", "后退", "闪避", "躲"],
+    "wait": ["wait", "等待", "观望", "屏息"],
+}
 
 
 class LLMClient:
@@ -71,11 +84,12 @@ class LLMClient:
 
 def parse_intent(player_input: str, state: GameState, llm: LLMClient | None = None) -> Action:
     if llm:
-        try:
-            return llm.parse_intent(player_input, state)
-        except Exception:
-            pass
-    return heuristic_parse_intent(player_input)
+        for _ in range(LLM_RETRY_ATTEMPTS):
+            try:
+                return llm.parse_intent(player_input, state)
+            except Exception:
+                pass
+    return heuristic_parse_intent(player_input, state)
 
 
 def narrate(
@@ -86,87 +100,119 @@ def narrate(
     llm: LLMClient | None = None,
 ) -> str:
     if llm:
-        try:
-            text = llm.narrate(action, check, changes, state)
-            if text:
-                return text
-        except Exception:
-            pass
+        for _ in range(LLM_RETRY_ATTEMPTS):
+            try:
+                text = llm.narrate(action, check, changes, state)
+                if text:
+                    return text
+            except Exception:
+                pass
     return fallback_narration(action, check, changes, state)
 
 
-def heuristic_parse_intent(player_input: str) -> Action:
+def heuristic_parse_intent(player_input: str, state: GameState | None = None) -> Action:
     text = player_input.strip()
-    intent_family = "unknown"
-    target = ""
     method = text
+    mentions = _entity_mentions(text, state)
+    intent_family = _infer_family(text, mentions)
+    target = ""
+    target_id = ""
     tool = ""
+    tool_id = ""
 
-    if any(word in text for word in ["火把"]):
-        tool = "火把"
-    elif any(word in text for word in ["铁钥匙", "钥匙"]):
-        tool = "铁钥匙"
-    elif any(word in text for word in ["短剑", "剑"]):
-        tool = "短剑"
-    elif any(word in text for word in ["木箱", "箱子"]):
-        tool = "木箱"
-
-    if tool and any(word in text for word in ["用", "插", "拧", "烧", "点燃"]):
-        intent_family = "use"
-    elif any(word in text for word in ["开门", "开锁", "打开", "撬"]):
-        intent_family = "open"
-    elif any(word in text for word in ["推动", "推开", "拉开"]) and any(word in text for word in ["门", "箱"]):
-        intent_family = "open"
-    elif any(word in text for word in ["拨弄", "摆弄"]) and any(word in text for word in ["锁", "锁扣", "箱"]):
-        intent_family = "open"
-    elif any(word in text for word in ["攻击", "打", "砍", "刺", "挥剑"]):
-        intent_family = "attack"
-    elif any(word in text for word in ["烧", "火把", "点燃"]):
-        intent_family = "use"
-    elif any(word in text for word in ["拿", "捡", "拾取", "取出", "翻找"]):
-        intent_family = "take"
-    elif any(word in text for word in ["拨弄", "摆弄", "推动", "拉动", "触碰", "按下"]):
-        intent_family = "interact"
-    elif any(word in text for word in ["检查", "观察", "搜索", "看", "调查"]):
-        intent_family = "inspect"
-    elif any(word in text for word in ["说", "问", "交涉", "威胁", "劝"]):
-        intent_family = "talk"
-    elif any(word in text for word in ["移动", "走", "靠近", "前往", "往", "接近", "潜行", "低调"]):
-        intent_family = "move"
-    elif any(word in text for word in ["逃", "后退", "闪避", "躲"]):
-        intent_family = "flee"
-    elif any(word in text for word in ["等待", "观望", "屏息"]):
-        intent_family = "wait"
-
-    if any(word in text for word in ["守卫", "卫兵", "敌人", "看守"]):
-        target = "守卫"
-    elif any(word in text for word in ["铁门"]):
-        target = "铁门"
-    elif any(word in text for word in ["木箱", "箱子"]):
-        target = "木箱"
-    elif any(word in text for word in ["残片", "碎片"]):
-        target = "残片"
-    elif any(word in text for word in ["钥匙", "铁钥匙"]):
-        target = "铁钥匙"
-    elif any(word in text for word in ["骷髅"]):
-        target = "骷髅"
-    elif any(word in text for word in ["左门", "石门", "门", "出口", "锁"]):
-        target = "左门"
-    elif intent_family in {"open", "use"}:
-        target = "左门"
+    if intent_family == "use" and len(mentions) >= 2:
+        tool = mentions[0]["name"]
+        tool_id = mentions[0]["id"]
+        target = mentions[-1]["name"]
+        target_id = mentions[-1]["id"]
+    elif intent_family == "use" and mentions:
+        if mentions[0].get("source") == "inventory":
+            tool = mentions[0]["name"]
+            tool_id = mentions[0]["id"]
+        else:
+            target = mentions[0]["name"]
+            target_id = mentions[0]["id"]
+    elif mentions:
+        target = mentions[-1]["name"]
+        target_id = mentions[-1]["id"]
 
     action = {
         "intent_family": intent_family,
         "type": intent_family,
         "target": target,
-        "target_id": "",
+        "target_id": target_id,
         "tool": tool,
-        "tool_id": tool,
+        "tool_id": tool_id,
         "approach_tags": extract_approach_tags(method),
         "method_text": method,
         "method": method,
     }
-    return action
+    return normalize_action(action, state)
+
+
+def _infer_family(text: str, mentions: list[dict[str, str]]) -> str:
+    has_use_verb = any(word in text for word in USE_VERBS)
+    if has_use_verb and mentions:
+        return "use"
+    if any(word in text for word in ["推动", "推开", "拉开"]) and any(word in text for word in ["门", "箱", "盖"]):
+        return "open"
+    if any(word in text for word in ["拨弄", "摆弄"]) and any(word in text for word in ["锁", "锁扣", "箱"]):
+        return "open"
+
+    for family in ["take", "open", "attack", "inspect", "talk", "move", "flee", "wait", "interact"]:
+        if any(keyword in text.lower() for keyword in ACTION_KEYWORDS[family]):
+            return family
+    return "unknown"
+
+
+def _entity_mentions(text: str, state: GameState | None) -> list[dict[str, str]]:
+    if not state:
+        return []
+
+    mentions: list[dict[str, str | int]] = []
+    for item in state.player.get("inventory", []):
+        _append_mention(mentions, text, str(item), str(item), str(item), source="inventory")
+
+    for entity_id, entity in state.entities.items():
+        if not state.is_interactable_entity(entity_id):
+            continue
+        names = [str(entity.get("name") or entity_id), *[str(alias) for alias in entity.get("aliases", [])]]
+        for name in sorted(set(names), key=len, reverse=True):
+            _append_mention(mentions, text, name, str(entity.get("name") or entity_id), entity_id)
+
+    mentions.sort(key=lambda match: (int(match["start"]), -int(match["length"])))
+    deduped: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for match in mentions:
+        match_id = str(match["id"])
+        if match_id in seen_ids:
+            continue
+        seen_ids.add(match_id)
+        deduped.append({"id": match_id, "name": str(match["name"]), "source": str(match["source"])})
+    return deduped
+
+
+def _append_mention(
+    mentions: list[dict[str, str | int]],
+    text: str,
+    alias: str,
+    display_name: str,
+    entity_id: str,
+    source: str = "entity",
+) -> None:
+    if not alias:
+        return
+    index = text.find(alias)
+    if index >= 0:
+        mentions.append(
+            {
+                "start": index,
+                "length": len(alias),
+                "name": display_name,
+                "id": entity_id,
+                "source": source,
+            }
+        )
 
 
 def fallback_narration(
@@ -181,12 +227,9 @@ def fallback_narration(
         event_text = "局势发生了变化，你必须立刻决定下一步。"
 
     ending = state.flags.get("ending")
-    if ending == "victory":
-        return f"{event_text} 守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。"
-    if ending == "death":
-        return f"{event_text} 你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。"
-    if ending == "timeout":
-        return f"{event_text} 你拖得太久，古墓深处传来沉重机关声，退路被封死。"
+    if ending:
+        ending_text = state.script.get("ending_texts", {}).get(ending, f"结局：{ending}。")
+        return f"{event_text} {ending_text}"
 
     return f"{_result_label(result)}：{event_text} 当前生命 {state.player['hp']}/{state.player['max_hp']}。"
 

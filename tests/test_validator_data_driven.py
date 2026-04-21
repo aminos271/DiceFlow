@@ -7,7 +7,7 @@ from diceflow.validator import validate
 
 class ValidatorDataDrivenTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = Game(use_llm=False)
+        self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
 
     def test_guard_allows_attack(self) -> None:
         action = {"type": "attack", "target": "\u5b88\u536b", "method": "", "tool": ""}

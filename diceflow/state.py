@@ -3,12 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from diceflow.script import ENTITY_RUNTIME_DEFAULTS, Script, load_script, materialize_entity
+from diceflow.script import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
 
 
 class GameState:
-    def __init__(self, script: Script | None = None) -> None:
-        self.script = deepcopy(script or load_script("tomb_entrance"))
+    def __init__(self, script: Script) -> None:
+        self.script = deepcopy(script)
         self.turn_id = 0
         self.player: dict[str, Any] = deepcopy(self.script["player"])
         self.scene: dict[str, Any] = deepcopy(self.script["scene"])

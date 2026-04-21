@@ -19,7 +19,7 @@ def update_state(action: Action, check: CheckResult, state: GameState) -> StateC
 
     return {
         "player": {"hp_delta": -1},
-        "events": ["迟疑让守卫抢占了位置，你被逼退并擦伤。"],
+        "events": [str(state.script.get("default_no_outcome_event", "行动没有产生明确结果，但局势继续推进。"))],
     }
 
 

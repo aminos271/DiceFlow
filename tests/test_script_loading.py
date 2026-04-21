@@ -116,7 +116,7 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertIn("$target without an entity target", str(context.exception))
 
     def test_action_spec_prefers_target_entity_action(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         action = {"type": "inspect", "target": "\u5de6\u95e8", "method": "", "tool": ""}
         self.assertTrue(validate(action, game.state)["valid"])
 
@@ -146,7 +146,7 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertEqual(action_spec["required_tools"], ["\u94c1\u94a5\u5319"])
 
     def test_action_spec_uses_scene_action_without_target(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         action = {"type": "wait", "target": "", "method": "", "tool": ""}
         self.assertTrue(validate(action, game.state)["valid"])
 

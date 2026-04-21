@@ -22,6 +22,40 @@ SCRIPT = {
         "game_over": False,
         "ending": "",
     },
+    "action_rules": [
+        {
+            "when": {
+                "intent_family": "open",
+                "target_id": "left_door",
+                "entities": {"guard_1": {"alive": True}},
+            },
+            "valid": False,
+            "reason": "守卫仍挡在门前，你必须先处理守卫或摆脱他的压制。",
+        }
+    ],
+    "dc_modifiers": [
+        {
+            "when": {
+                "intent_family": "open",
+                "target_id": "left_door",
+                "target": {"weakened": True},
+            },
+            "modifier": -3,
+        },
+        {
+            "when": {
+                "intent_family": "attack",
+                "target_id": "guard_1",
+                "target": {"hostile": False},
+            },
+            "modifier": -2,
+        },
+    ],
+    "ending_texts": {
+        "victory": "守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。",
+        "death": "你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。",
+        "timeout": "你拖得太久，古墓深处传来沉重机关声，退路被封死。",
+    },
     "entities": {
         "guard_1": {
             "name": "守卫",

@@ -1,13 +1,14 @@
 import unittest
 
 from diceflow.game import Game
+from diceflow.script import load_script
 from diceflow.updater import update_state
 from diceflow.validator import validate
 
 
 class UpdaterOutcomesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = Game(use_llm=False)
+        self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
         self.attack_guard = {"type": "attack", "target": "\u5b88\u536b", "method": "", "tool": ""}
         self.assertTrue(validate(self.attack_guard, self.game.state)["valid"])
 
@@ -42,4 +43,3 @@ class UpdaterOutcomesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

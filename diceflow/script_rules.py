@@ -6,14 +6,11 @@ from diceflow.state import GameState
 
 
 def validate_scene_rules(action: Action, state: GameState) -> dict[str, str | bool]:
-    action_type = action_family(action)
-    target_id = action.get("target_id")
-
-    if action_type == "open" and target_id == "left_door":
-        if state.entities.get("guard_1", {}).get("alive", False):
+    for rule in state.script.get("action_rules", []):
+        if _matches_when(rule.get("when", {}), action, state):
             return {
-                "valid": False,
-                "reason": "守卫仍挡在门前，你必须先处理守卫或摆脱他的压制。",
+                "valid": bool(rule.get("valid", True)),
+                "reason": str(rule.get("reason", "")),
             }
 
     return {"valid": True, "reason": ""}
@@ -24,13 +21,9 @@ def get_dc_modifier(action: Action, state: GameState) -> int:
     target_id = action.get("target_id")
     modifier = 0
 
-    if action_type == "open" and target_id == "left_door":
-        if state.entities["left_door"].get("weakened"):
-            modifier -= 3
-
-    if action_type == "attack" and target_id == "guard_1":
-        if not state.entities["guard_1"].get("hostile", True):
-            modifier -= 2
+    for rule in state.script.get("dc_modifiers", []):
+        if _matches_when(rule.get("when", {}), action, state):
+            modifier += int(rule.get("modifier", 0))
 
     modifier += _approach_dc_modifier(action_type, action.get("approach_tags", []))
     return modifier
@@ -48,3 +41,46 @@ def _approach_dc_modifier(action_type: str, approach_tags: object) -> int:
         modifier += 1
 
     return modifier
+
+
+def _matches_when(when: object, action: Action, state: GameState) -> bool:
+    if not isinstance(when, dict):
+        return False
+
+    action_type = action_family(action)
+    target_id = str(action.get("target_id") or "")
+    target = state.entities.get(target_id, {})
+
+    if "intent_family" in when and not _matches_value(action_type, when["intent_family"]):
+        return False
+    if "target_id" in when and not _matches_value(target_id, when["target_id"]):
+        return False
+    if "target_type" in when and not _matches_value(str(target.get("type") or ""), when["target_type"]):
+        return False
+    if "target" in when and not _matches_object(target, when["target"]):
+        return False
+    if "flags" in when and not _matches_object(state.flags, when["flags"]):
+        return False
+
+    entities = when.get("entities", {})
+    if isinstance(entities, dict):
+        for entity_id, expected in entities.items():
+            if not _matches_object(state.entities.get(str(entity_id), {}), expected):
+                return False
+
+    return True
+
+
+def _matches_value(actual: object, expected: object) -> bool:
+    if isinstance(expected, list):
+        return actual in expected
+    return actual == expected
+
+
+def _matches_object(actual: dict[str, object], expected: object) -> bool:
+    if not isinstance(expected, dict):
+        return False
+    for key, expected_value in expected.items():
+        if actual.get(str(key)) != expected_value:
+            return False
+    return True

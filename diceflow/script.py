@@ -68,6 +68,8 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
         "locked": True,
         "hooks": {
             "required_tools": [],
+            "open_flags": {},
+            "use_flags": {},
             "open_critical_success_events": ["$target_name被你顺利打开。"],
             "open_success_events": ["$target_name被打开。"],
             "open_fail_events": ["$target_name卡住了，你需要再试一次。"],
@@ -87,12 +89,12 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
                     "outcomes": {
                         "critical_success": {
                             "entities": {"$target": {"opened": True, "locked": False}},
-                            "flags": {"door_open": True},
+                            "flags": "$hook.open_flags",
                             "events": "$hook.open_critical_success_events",
                         },
                         "success": {
                             "entities": {"$target": {"opened": True, "locked": False}},
-                            "flags": {"door_open": True},
+                            "flags": "$hook.open_flags",
                             "events": "$hook.open_success_events",
                         },
                         "fail": {
@@ -110,12 +112,12 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
                     "outcomes": {
                         "critical_success": {
                             "entities": {"$target": {"opened": True, "locked": False}},
-                            "flags": {"door_open": True},
+                            "flags": "$hook.use_flags",
                             "events": "$hook.use_critical_success_events",
                         },
                         "success": {
                             "entities": {"$target": {"opened": True, "locked": False}},
-                            "flags": {"door_open": True},
+                            "flags": "$hook.use_flags",
                             "events": "$hook.use_success_events",
                         },
                         "fail": {
@@ -203,6 +205,12 @@ REQUIRED_TOP_LEVEL_KEYS = {
     "entities",
     "scene_actions",
     "ending_conditions",
+}
+OPTIONAL_TOP_LEVEL_TYPES = {
+    "action_rules": list,
+    "dc_modifiers": list,
+    "ending_texts": dict,
+    "default_no_outcome_event": str,
 }
 
 
@@ -347,6 +355,10 @@ def _validate_top_level(script: Script, errors: list[str]) -> None:
         errors.append("scene_actions must be a dict")
     if not isinstance(script.get("ending_conditions", []), list):
         errors.append("ending_conditions must be a list")
+
+    for key, expected_type in OPTIONAL_TOP_LEVEL_TYPES.items():
+        if key in script and not isinstance(script[key], expected_type):
+            errors.append(f"{key} must be a {expected_type.__name__}")
 
 
 def _validate_entity(entity_id: str, entity: dict[str, Any], errors: list[str]) -> None:

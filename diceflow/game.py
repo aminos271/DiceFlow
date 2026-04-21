@@ -13,8 +13,8 @@ from diceflow.validator import validate
 
 
 class Game:
-    def __init__(self, script: Script | None = None, use_llm: bool = True) -> None:
-        self.script = script or load_script("tomb_entrance")
+    def __init__(self, script: Script, use_llm: bool = True) -> None:
+        self.script = script
         self.state = GameState(self.script)
         self.rules = RuleEngine()
         self.llm = self._build_llm() if use_llm else None

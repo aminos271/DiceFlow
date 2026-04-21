@@ -1,12 +1,13 @@
 import unittest
 
 from diceflow.game import Game
+from diceflow.script import load_script
 from diceflow.validator import validate
 
 
 class SceneRulesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.game = Game(use_llm=False)
+        self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
 
     def test_guard_alive_blocks_opening_left_door(self) -> None:
         action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}

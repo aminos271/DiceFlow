@@ -216,6 +216,8 @@ SCRIPT = {
             "type": "door",
             "hooks": {
                 "required_tools": ["铁钥匙"],
+                "open_flags": {"door_open": True},
+                "use_flags": {"door_open": True},
                 "open_critical_success_events": ["铁门被你顺利打开，出口就在眼前。"],
                 "open_success_events": ["铁门被打开，你看到了出口。"],
                 "open_fail_events": ["钥匙卡住了，你需要再试一次。"],
@@ -307,4 +309,3 @@ SCRIPT = {
         },
     ],
 }
-

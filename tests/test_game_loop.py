@@ -10,7 +10,7 @@ from diceflow.validator import validate
 
 class GameLoopTest(unittest.TestCase):
     def test_heuristic_loop_updates_state(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         game.rules = RuleEngine(random.Random(0))
 
         first = game.run_turn("\u653b\u51fb\u5b88\u536b")
@@ -24,7 +24,7 @@ class GameLoopTest(unittest.TestCase):
         self.assertLessEqual(game.state.entities["guard_1"]["hp"], 6)
 
     def test_state_authority_reaches_victory(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
 
         game.state.apply_changes(
             {
@@ -40,7 +40,7 @@ class GameLoopTest(unittest.TestCase):
         self.assertEqual(game.state.flags["ending"], "victory")
 
     def test_validator_uses_entity_allowed_actions(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
 
         attack_door = {"type": "attack", "target": "\u5de6\u95e8", "method": "", "tool": ""}
         open_guard = {"type": "open", "target": "\u5b88\u536b", "method": "", "tool": ""}
@@ -56,7 +56,7 @@ class GameLoopTest(unittest.TestCase):
         self.assertIn("guard_1", game.state.entities)
 
     def test_scene_rule_blocks_opening_door_while_guard_alive(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
 
         result = validate(action, game.state)
@@ -65,7 +65,7 @@ class GameLoopTest(unittest.TestCase):
         self.assertIn("\u5b88\u536b", result["reason"])
 
     def test_weakened_door_reduces_open_dc(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
         action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
         self.assertTrue(validate(action, game.state)["valid"])
@@ -78,7 +78,7 @@ class GameLoopTest(unittest.TestCase):
         self.assertEqual(weakened_dc, 11)
 
     def test_action_effects_come_from_entity_metadata(self) -> None:
-        game = Game(use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
         action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
         self.assertTrue(validate(action, game.state)["valid"])
