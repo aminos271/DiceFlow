@@ -4,7 +4,7 @@ import random
 
 from diceflow.core.models import Action
 from diceflow.core.state import GameState
-from diceflow.scripting.loader import resolve_action_spec
+from diceflow.scripting.resolver import resolve_action_spec
 from diceflow.scripting.scene_rules import get_dc_modifier
 
 

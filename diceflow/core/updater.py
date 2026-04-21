@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from diceflow.core.models import Action, CheckResult, StateChanges
 from diceflow.core.state import GameState
-from diceflow.scripting.loader import resolve_action_spec
+from diceflow.scripting.resolver import resolve_action_spec
 
 
 def update_state(action: Action, check: CheckResult, state: GameState) -> StateChanges:

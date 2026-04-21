@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from diceflow.scripting.loader import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
+from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
 
 
 class GameState:
