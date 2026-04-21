@@ -1,9 +1,9 @@
 import unittest
 
-from diceflow.game import Game
-from diceflow.script import load_script
-from diceflow.updater import update_state
-from diceflow.validator import validate
+from diceflow.app.game import Game
+from diceflow.core.updater import update_state
+from diceflow.core.validator import validate
+from diceflow.scripting.loader import load_script
 
 
 class RuntimeEntitiesTest(unittest.TestCase):

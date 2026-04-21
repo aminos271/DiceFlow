@@ -4,8 +4,8 @@ from copy import deepcopy
 from importlib import import_module
 from typing import Any
 
-from diceflow.intent import CANONICAL_INTENT_FAMILIES, action_family
-from diceflow.models import Action
+from diceflow.core.intent import CANONICAL_INTENT_FAMILIES, action_family
+from diceflow.core.models import Action
 
 
 Script = dict[str, Any]
@@ -215,7 +215,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
 
 
 def load_script(script_name: str) -> Script:
-    module = import_module(f"diceflow.scripts.{script_name}")
+    module = import_module(f"diceflow.content.scripts.{script_name}")
     script = deepcopy(module.SCRIPT)
     materialize_script(script)
     validate_script(script)

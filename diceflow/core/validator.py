@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from diceflow.intent import action_family, normalize_action
-from diceflow.models import Action
-from diceflow.script import get_allowed_actions, resolve_action_spec
-from diceflow.script_rules import validate_scene_rules
-from diceflow.state import GameState
+from diceflow.core.intent import action_family, normalize_action
+from diceflow.core.models import Action
+from diceflow.core.state import GameState
+from diceflow.scripting.loader import get_allowed_actions, resolve_action_spec
+from diceflow.scripting.scene_rules import validate_scene_rules
 
 
 TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "talk", "take"}

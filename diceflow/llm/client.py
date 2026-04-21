@@ -6,13 +6,13 @@ from typing import Any
 
 from openai import OpenAI
 
-import config
-from diceflow.intent import canonical_family, extract_approach_tags, normalize_action
-from diceflow.models import Action, CheckResult, StateChanges
-from diceflow.state import GameState
+from diceflow import config
+from diceflow.core.intent import canonical_family, extract_approach_tags, normalize_action
+from diceflow.core.models import Action, CheckResult, StateChanges
+from diceflow.core.state import GameState
 
 
-PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "content" / "prompts"
 LLM_RETRY_ATTEMPTS = 2
 USE_VERBS = ["用", "插", "拧", "烧", "点燃"]
 ACTION_KEYWORDS = {

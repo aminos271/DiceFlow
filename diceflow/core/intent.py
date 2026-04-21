@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from diceflow.models import Action
+from diceflow.core.models import Action
 
 
 CANONICAL_INTENT_FAMILIES = {

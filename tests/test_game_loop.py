@@ -1,11 +1,11 @@
 import random
 import unittest
 
-from diceflow.game import Game
-from diceflow.rules import RuleEngine
-from diceflow.script import load_script
-from diceflow.updater import update_state
-from diceflow.validator import validate
+from diceflow.app.game import Game
+from diceflow.core.rules import RuleEngine
+from diceflow.core.updater import update_state
+from diceflow.core.validator import validate
+from diceflow.scripting.loader import load_script
 
 
 class GameLoopTest(unittest.TestCase):

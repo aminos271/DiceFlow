@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from diceflow.intent import action_family
-from diceflow.models import Action
-from diceflow.state import GameState
+from diceflow.core.intent import action_family
+from diceflow.core.models import Action
+from diceflow.core.state import GameState
 
 
 def validate_scene_rules(action: Action, state: GameState) -> dict[str, str | bool]:

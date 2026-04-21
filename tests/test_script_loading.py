@@ -1,8 +1,8 @@
 import unittest
 
-from diceflow.game import Game
-from diceflow.script import get_action_spec, load_script, resolve_action_spec, validate_script
-from diceflow.validator import validate
+from diceflow.app.game import Game
+from diceflow.core.validator import validate
+from diceflow.scripting.loader import get_action_spec, load_script, resolve_action_spec, validate_script
 
 
 class ScriptLoadingTest(unittest.TestCase):

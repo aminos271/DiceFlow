@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from diceflow.models import Action, CheckResult, StateChanges
-from diceflow.script import resolve_action_spec
-from diceflow.state import GameState
+from diceflow.core.models import Action, CheckResult, StateChanges
+from diceflow.core.state import GameState
+from diceflow.scripting.loader import resolve_action_spec
 
 
 def update_state(action: Action, check: CheckResult, state: GameState) -> StateChanges:

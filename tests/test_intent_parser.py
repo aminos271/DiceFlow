@@ -1,8 +1,8 @@
 import unittest
 
-from diceflow.game import Game
+from diceflow.app.game import Game
 from diceflow.llm import heuristic_parse_intent, parse_intent
-from diceflow.script import load_script
+from diceflow.scripting.loader import load_script
 
 
 class IntentParserTest(unittest.TestCase):

@@ -1,8 +1,8 @@
 import unittest
 
-from diceflow.game import Game
-from diceflow.script import load_script
-from diceflow.validator import validate
+from diceflow.app.game import Game
+from diceflow.core.validator import validate
+from diceflow.scripting.loader import load_script
 
 
 class ValidatorDataDrivenTest(unittest.TestCase):

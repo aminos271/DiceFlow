@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import random
 
-from diceflow.models import Action
-from diceflow.script import resolve_action_spec
-from diceflow.script_rules import get_dc_modifier
-from diceflow.state import GameState
+from diceflow.core.models import Action
+from diceflow.core.state import GameState
+from diceflow.scripting.loader import resolve_action_spec
+from diceflow.scripting.scene_rules import get_dc_modifier
 
 
 class RuleEngine:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from diceflow.game import run_cli
+from diceflow.app.cli import run_cli
 
 
 def main() -> None:

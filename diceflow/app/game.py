@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from diceflow.llm import LLMClient, narrate, parse_intent
-from diceflow.models import TurnRecord
-from diceflow.rules import RuleEngine
-from diceflow.script import Script, load_script
-from diceflow.state import GameState
-from diceflow.updater import update_state
-from diceflow.validator import validate
+from diceflow.core.models import TurnRecord
+from diceflow.core.rules import RuleEngine
+from diceflow.core.state import GameState
+from diceflow.core.updater import update_state
+from diceflow.core.validator import validate
+from diceflow.llm.client import LLMClient, narrate, parse_intent
+from diceflow.scripting.loader import Script, load_script
 
 
 class Game:

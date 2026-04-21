@@ -1,7 +1,7 @@
 import unittest
 
-from diceflow.game import Game
-from diceflow.script import load_script
+from diceflow.app.game import Game
+from diceflow.scripting.loader import load_script
 
 
 class EndingConditionsTest(unittest.TestCase):
