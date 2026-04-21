@@ -10,16 +10,16 @@ class SceneRulesTest(unittest.TestCase):
         self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
 
     def test_guard_alive_blocks_opening_left_door(self) -> None:
-        action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        action = {"type": "open", "target": "左门", "method": "", "tool": ""}
 
         result = validate(action, self.game.state)
 
         self.assertFalse(result["valid"])
-        self.assertIn("\u5b88\u536b", result["reason"])
+        self.assertIn("守卫", result["reason"])
 
     def test_weakened_door_reduces_open_dc_by_three(self) -> None:
         self.game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
-        action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        action = {"type": "open", "target": "左门", "method": "", "tool": ""}
         self.assertTrue(validate(action, self.game.state)["valid"])
 
         normal_dc = self.game.rules._dc_for(action, self.game.state)
@@ -29,7 +29,7 @@ class SceneRulesTest(unittest.TestCase):
         self.assertEqual(weakened_dc, normal_dc - 3)
 
     def test_non_hostile_guard_reduces_attack_dc_by_two(self) -> None:
-        action = {"type": "attack", "target": "\u5b88\u536b", "method": "", "tool": ""}
+        action = {"type": "attack", "target": "守卫", "method": "", "tool": ""}
         self.assertTrue(validate(action, self.game.state)["valid"])
 
         hostile_dc = self.game.rules._dc_for(action, self.game.state)
@@ -40,18 +40,18 @@ class SceneRulesTest(unittest.TestCase):
 
     def test_approach_tags_modify_dc(self) -> None:
         self.game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
-        normal_action = {"type": "open", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        normal_action = {"type": "open", "target": "左门", "method": "", "tool": ""}
         careful_action = {
             "type": "open",
-            "target": "\u5de6\u95e8",
-            "method": "\u5c0f\u5fc3\u5f00\u95e8",
+            "target": "左门",
+            "method": "小心开门",
             "tool": "",
             "approach_tags": ["careful"],
         }
         quick_action = {
             "type": "open",
-            "target": "\u5de6\u95e8",
-            "method": "\u7acb\u523b\u5f00\u95e8",
+            "target": "左门",
+            "method": "立刻开门",
             "tool": "",
             "approach_tags": ["quick"],
         }

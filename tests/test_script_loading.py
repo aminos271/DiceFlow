@@ -9,6 +9,7 @@ class ScriptLoadingTest(unittest.TestCase):
     def test_load_tomb_entrance_script(self) -> None:
         script = load_script("tomb_entrance")
 
+        self.assertEqual(script["schema_version"], 1)
         self.assertEqual(script["id"], "tomb_entrance")
         self.assertIn("player", script)
         self.assertIn("scene", script)
@@ -39,7 +40,7 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertIn("take", key["metadata"]["actions"])
         self.assertEqual(key["metadata"]["actions"]["take"]["outcomes"]["success"]["flags"], {"has_key": True})
         self.assertEqual(door["type"], "door")
-        self.assertEqual(door["metadata"]["actions"]["open"]["required_tools"], ["\u94c1\u94a5\u5319"])
+        self.assertEqual(door["metadata"]["actions"]["open"]["required_tools"], ["铁钥匙"])
 
     def test_required_entity_action_fields_exist(self) -> None:
         script = load_script("tomb_entrance")
@@ -64,6 +65,24 @@ class ScriptLoadingTest(unittest.TestCase):
             validate_script(script)
 
         self.assertIn("missing top-level field: entities", str(context.exception))
+
+    def test_validate_script_rejects_unknown_top_level_field(self) -> None:
+        script = load_script("tomb_entrance")
+        script["unexpected"] = True
+
+        with self.assertRaises(ValueError) as context:
+            validate_script(script)
+
+        self.assertIn("unsupported top-level field: unexpected", str(context.exception))
+
+    def test_validate_script_rejects_wrong_schema_version(self) -> None:
+        script = load_script("tomb_entrance")
+        script["schema_version"] = 2
+
+        with self.assertRaises(ValueError) as context:
+            validate_script(script)
+
+        self.assertIn("schema_version must be 1", str(context.exception))
 
     def test_validate_script_rejects_action_without_outcomes(self) -> None:
         script = load_script("tomb_entrance")
@@ -117,7 +136,7 @@ class ScriptLoadingTest(unittest.TestCase):
 
     def test_action_spec_prefers_target_entity_action(self) -> None:
         game = Game(script=load_script("tomb_entrance"), use_llm=False)
-        action = {"type": "inspect", "target": "\u5de6\u95e8", "method": "", "tool": ""}
+        action = {"type": "inspect", "target": "左门", "method": "", "tool": ""}
         self.assertTrue(validate(action, game.state)["valid"])
 
         action_spec = get_action_spec(action, game.state)
@@ -127,12 +146,12 @@ class ScriptLoadingTest(unittest.TestCase):
 
     def test_resolved_action_spec_includes_normalized_context(self) -> None:
         game = Game(script=load_script("dungeon_corridor"), use_llm=False)
-        game.state.apply_changes({"player": {"inventory_add": ["\u94c1\u94a5\u5319"]}})
+        game.state.apply_changes({"player": {"inventory_add": ["铁钥匙"]}})
         action = {
             "type": "burn",
-            "target": "\u94c1\u95e8",
-            "tool": "\u94c1\u94a5\u5319",
-            "method_text": "\u7528\u94c1\u94a5\u5319\u5f00\u94c1\u95e8",
+            "target": "铁门",
+            "tool": "铁钥匙",
+            "method_text": "用铁钥匙开铁门",
         }
         self.assertTrue(validate(action, game.state)["valid"])
 
@@ -141,9 +160,9 @@ class ScriptLoadingTest(unittest.TestCase):
         self.assertEqual(action_spec["intent_family"], "use")
         self.assertEqual(action_spec["scope"], "entity")
         self.assertEqual(action_spec["target_id"], "iron_door")
-        self.assertEqual(action_spec["tool_id"], "\u94c1\u94a5\u5319")
+        self.assertEqual(action_spec["tool_id"], "铁钥匙")
         self.assertEqual(action_spec["dc"], 12)
-        self.assertEqual(action_spec["required_tools"], ["\u94c1\u94a5\u5319"])
+        self.assertEqual(action_spec["required_tools"], ["铁钥匙"])
 
     def test_action_spec_uses_scene_action_without_target(self) -> None:
         game = Game(script=load_script("tomb_entrance"), use_llm=False)

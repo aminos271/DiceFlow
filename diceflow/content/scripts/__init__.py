@@ -1,2 +1,1 @@
-"""Built-in DiceFlow scripts."""
-
+"""Bundled DiceFlow YAML scripts."""

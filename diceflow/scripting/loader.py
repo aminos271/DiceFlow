@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from importlib import import_module
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from diceflow.core.intent import CANONICAL_INTENT_FAMILIES, action_family
 from diceflow.core.models import Action
 
 
 Script = dict[str, Any]
+SCHEMA_VERSION = 1
+SCRIPT_DIR = Path(__file__).resolve().parent.parent / "content" / "scripts"
 ENTITY_RUNTIME_DEFAULTS = {
     "visible": True,
     "available": True,
@@ -197,6 +201,7 @@ VALID_CHANGE_KEYS = {
 }
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 REQUIRED_TOP_LEVEL_KEYS = {
+    "schema_version",
     "id",
     "title",
     "player",
@@ -206,7 +211,20 @@ REQUIRED_TOP_LEVEL_KEYS = {
     "scene_actions",
     "ending_conditions",
 }
+TOP_LEVEL_TYPES = {
+    "schema_version": int,
+    "id": str,
+    "title": str,
+    "player": dict,
+    "scene": dict,
+    "flags": dict,
+    "entities": dict,
+    "scene_actions": dict,
+    "ending_conditions": list,
+}
 OPTIONAL_TOP_LEVEL_TYPES = {
+    "intro": str,
+    "invalid_action_event": str,
     "action_rules": list,
     "dc_modifiers": list,
     "ending_texts": dict,
@@ -215,8 +233,15 @@ OPTIONAL_TOP_LEVEL_TYPES = {
 
 
 def load_script(script_name: str) -> Script:
-    module = import_module(f"diceflow.content.scripts.{script_name}")
-    script = deepcopy(module.SCRIPT)
+    script_path = SCRIPT_DIR / f"{script_name}.yaml"
+    if not script_path.exists():
+        raise FileNotFoundError(f"script not found: {script_name}")
+
+    loaded = yaml.safe_load(script_path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"script must be a mapping: {script_name}")
+
+    script = deepcopy(loaded)
     materialize_script(script)
     validate_script(script)
     return script
@@ -345,16 +370,21 @@ def validate_script(script: Script) -> None:
 
 
 def _validate_top_level(script: Script, errors: list[str]) -> None:
+    allowed_keys = REQUIRED_TOP_LEVEL_KEYS | set(OPTIONAL_TOP_LEVEL_TYPES)
+    unknown_keys = sorted(set(script) - allowed_keys)
+    for key in unknown_keys:
+        errors.append(f"unsupported top-level field: {key}")
+
     missing = sorted(REQUIRED_TOP_LEVEL_KEYS - set(script))
     for key in missing:
         errors.append(f"missing top-level field: {key}")
 
-    if not isinstance(script.get("entities", {}), dict):
-        errors.append("entities must be a dict")
-    if not isinstance(script.get("scene_actions", {}), dict):
-        errors.append("scene_actions must be a dict")
-    if not isinstance(script.get("ending_conditions", []), list):
-        errors.append("ending_conditions must be a list")
+    if script.get("schema_version") != SCHEMA_VERSION:
+        errors.append(f"schema_version must be {SCHEMA_VERSION}")
+
+    for key, expected_type in TOP_LEVEL_TYPES.items():
+        if key in script and not isinstance(script[key], expected_type):
+            errors.append(f"{key} must be a {expected_type.__name__}")
 
     for key, expected_type in OPTIONAL_TOP_LEVEL_TYPES.items():
         if key in script and not isinstance(script[key], expected_type):

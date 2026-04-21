@@ -1,0 +1,231 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://diceflow.local/schemas/script.schema.yaml
+title: DiceFlow Script
+type: object
+additionalProperties: false
+required:
+  - schema_version
+  - id
+  - title
+  - player
+  - scene
+  - flags
+  - entities
+  - scene_actions
+  - ending_conditions
+properties:
+  schema_version:
+    const: 1
+  id:
+    type: string
+  title:
+    type: string
+  intro:
+    type: string
+  invalid_action_event:
+    type: string
+  default_no_outcome_event:
+    type: string
+  player:
+    type: object
+    required: [hp, max_hp, inventory, location]
+    additionalProperties: true
+    properties:
+      hp:
+        type: integer
+      max_hp:
+        type: integer
+      inventory:
+        type: array
+        items:
+          type: string
+      location:
+        type: string
+  scene:
+    type: object
+    required: [name, description]
+    additionalProperties: true
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+  flags:
+    type: object
+    additionalProperties: true
+  action_rules:
+    type: array
+    items:
+      $ref: "#/$defs/conditional_rule"
+  dc_modifiers:
+    type: array
+    items:
+      type: object
+      required: [when, modifier]
+      additionalProperties: false
+      properties:
+        when:
+          $ref: "#/$defs/when"
+        modifier:
+          type: integer
+  ending_texts:
+    type: object
+    additionalProperties:
+      type: string
+  entities:
+    type: object
+    additionalProperties:
+      $ref: "#/$defs/entity"
+  scene_actions:
+    type: object
+    additionalProperties:
+      $ref: "#/$defs/action_spec"
+  ending_conditions:
+    type: array
+    items:
+      type: object
+      required: [ending, when]
+      additionalProperties: false
+      properties:
+        ending:
+          type: string
+        when:
+          $ref: "#/$defs/ending_when"
+$defs:
+  entity:
+    type: object
+    additionalProperties: true
+    properties:
+      name:
+        type: string
+      aliases:
+        type: array
+        items:
+          type: string
+      type:
+        type: string
+      metadata:
+        type: object
+        required: [actions]
+        additionalProperties: true
+        properties:
+          allowed_actions:
+            type: array
+            items:
+              type: string
+          actions:
+            type: object
+            additionalProperties:
+              $ref: "#/$defs/action_spec"
+  action_spec:
+    type: object
+    required: [dc, outcomes]
+    additionalProperties: false
+    properties:
+      dc:
+        type: integer
+      required_tools:
+        type: array
+        items:
+          type: string
+      outcomes:
+        type: object
+        minProperties: 1
+        additionalProperties:
+          $ref: "#/$defs/state_changes"
+  state_changes:
+    type: object
+    additionalProperties: false
+    properties:
+      player:
+        type: object
+        additionalProperties: true
+      entities:
+        type: object
+        additionalProperties: true
+      flags:
+        type: object
+        additionalProperties: true
+      events:
+        type: array
+        items:
+          type: string
+      spawn_entities:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/entity"
+      remove_entities:
+        type: array
+        items:
+          type: string
+      reveal_entities:
+        type: array
+        items:
+          type: string
+      move_item_to_inventory:
+        type: array
+        items:
+          type: string
+      set_entity_states:
+        type: object
+        additionalProperties: true
+  conditional_rule:
+    type: object
+    required: [when]
+    additionalProperties: true
+    properties:
+      when:
+        $ref: "#/$defs/when"
+      valid:
+        type: boolean
+      reason:
+        type: string
+  when:
+    type: object
+    additionalProperties: false
+    properties:
+      intent_family:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_id:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_type:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target:
+        type: object
+        additionalProperties: true
+      flags:
+        type: object
+        additionalProperties: true
+      entities:
+        type: object
+        additionalProperties:
+          type: object
+          additionalProperties: true
+  ending_when:
+    type: object
+    additionalProperties: false
+    properties:
+      player_hp_lte:
+        type: integer
+      turn_id_gte:
+        type: integer
+      flags:
+        type: object
+        additionalProperties: true
+      entities:
+        type: object
+        additionalProperties:
+          type: object
+          additionalProperties: true

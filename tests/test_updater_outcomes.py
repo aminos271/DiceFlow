@@ -9,7 +9,7 @@ from diceflow.scripting.loader import load_script
 class UpdaterOutcomesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
-        self.attack_guard = {"type": "attack", "target": "\u5b88\u536b", "method": "", "tool": ""}
+        self.attack_guard = {"type": "attack", "target": "守卫", "method": "", "tool": ""}
         self.assertTrue(validate(self.attack_guard, self.game.state)["valid"])
 
     def test_success_maps_to_configured_changes(self) -> None:
