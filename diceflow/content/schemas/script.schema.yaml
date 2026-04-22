@@ -61,6 +61,10 @@ properties:
     type: array
     items:
       $ref: "#/$defs/generic_rule"
+  derivation_rules:
+    type: array
+    items:
+      $ref: "#/$defs/derivation_rule"
   dc_modifiers:
     type: array
     items:
@@ -210,6 +214,24 @@ $defs:
         minProperties: 1
         additionalProperties:
           $ref: "#/$defs/state_changes"
+  derivation_rule:
+    type: object
+    required: [when, spawn]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+      when:
+        $ref: "#/$defs/derivation_when"
+      spawn:
+        type: object
+        required: [id_template, entity]
+        additionalProperties: false
+        properties:
+          id_template:
+            type: string
+          entity:
+            $ref: "#/$defs/entity"
   when:
     type: object
     additionalProperties: false
@@ -262,6 +284,52 @@ $defs:
             items:
               type: string
       any_tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+  derivation_when:
+    type: object
+    additionalProperties: false
+    properties:
+      result:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      intent_family:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_id:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_type:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target:
+        type: object
+        additionalProperties: true
+      flags:
+        type: object
+        additionalProperties: true
+      target_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_target_tags:
         oneOf:
           - type: string
           - type: array

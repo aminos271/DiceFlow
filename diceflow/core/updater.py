@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from diceflow.core.derivation import derive_state_changes
 from diceflow.core.models import Action, CheckResult, StateChanges
 from diceflow.core.state import GameState
 from diceflow.scripting.resolver import resolve_action_spec
@@ -13,14 +14,17 @@ def update_state(action: Action, check: CheckResult, state: GameState) -> StateC
     outcomes = action_spec.get("outcomes", {})
 
     if result in outcomes:
-        return _expand_placeholders(outcomes[result], action, state)
+        changes = _expand_placeholders(outcomes[result], action, state)
+        return derive_state_changes(action, check, changes, state)
     if "fail" in outcomes:
-        return _expand_placeholders(outcomes["fail"], action, state)
+        changes = _expand_placeholders(outcomes["fail"], action, state)
+        return derive_state_changes(action, check, changes, state)
 
-    return {
+    changes = {
         "player": {"hp_delta": -1},
         "events": [str(state.script.get("default_no_outcome_event", "行动没有产生明确结果，但局势继续推进。"))],
     }
+    return derive_state_changes(action, check, changes, state)
 
 
 def _expand_placeholders(changes: StateChanges, action: Action, state: GameState) -> StateChanges:
