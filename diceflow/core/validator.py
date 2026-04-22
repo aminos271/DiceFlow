@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from diceflow.core.intent import action_family, normalize_action
+from diceflow.core.derivation import resolve_implied_entity
 from diceflow.core.models import Action
 from diceflow.core.state import GameState
 from diceflow.scripting.resolver import get_allowed_actions, resolve_action_spec
@@ -12,6 +13,8 @@ TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "throw", "talk", "take"}
 
 def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     action.update(normalize_action(action, state))
+    if action.get("target") and not action.get("target_id"):
+        action["target_id"] = resolve_implied_entity(action, state)
     intent_family = action_family(action)
     action_spec = resolve_action_spec(action, state)
     target = action.get("target")

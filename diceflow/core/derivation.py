@@ -7,6 +7,23 @@ from diceflow.core.intent import action_family
 from diceflow.core.models import Action, CheckResult, StateChanges
 
 
+DEFAULT_IMPLIED_TEMPLATES: dict[str, dict[str, Any]] = {
+    "shield": {
+        "id_template": "$source_id_shield",
+        "entity": {
+            "name": "shield",
+            "aliases": ["shield"],
+            "type": "pickup",
+            "tags": ["equipment", "shield", "implied", "derived"],
+            "lifecycle": {
+                "category": "derived",
+                "cleanup": {"policy": "never"},
+            },
+        },
+    },
+}
+
+
 def derive_state_changes(
     action: Action,
     check: CheckResult,
@@ -25,6 +42,41 @@ def derive_state_changes(
     merged = deepcopy(explicit_changes)
     _merge_changes(merged, derived_changes)
     return merged
+
+
+def resolve_implied_entity(action: Action, state: Any) -> str:
+    target_text = str(action.get("target") or "").strip()
+    if not target_text:
+        return ""
+
+    for source_id, source in state.entities.items():
+        if not state.is_interactable_entity(source_id):
+            continue
+        for implied in _iter_implied_specs(source):
+            template = _resolve_implied_template(implied, state)
+            entity = _render_implied_entity(template, source_id, source, state)
+            if not _matches_implied_target(target_text, entity, implied):
+                continue
+
+            entity_id = _render_source_template(
+                str(template.get("id_template") or f"{source_id}_{_implied_kind(implied)}"),
+                source_id,
+                source,
+                state,
+            )
+            if not entity_id:
+                continue
+            existing_id = state.find_entity_id(entity_id) or state.find_entity_id(str(entity.get("name") or ""))
+            if existing_id:
+                return existing_id
+
+            entity["_origin_kind"] = "derived"
+            entity["_source_action"] = action_family(action)
+            entity["_source_entity_id"] = source_id
+            entity["_rule_id"] = f"implied:{_implied_kind(implied)}"
+            state.apply_changes({"spawn_entities": {entity_id: entity}})
+            return entity_id
+    return ""
 
 
 def _matches_rule(
@@ -96,6 +148,57 @@ def _changes_for_rule(
     return {"spawn_entities": {entity_id: entity}}
 
 
+def _iter_implied_specs(source: dict[str, Any]) -> list[Any]:
+    specs: list[Any] = []
+    for key in ("implied_equipment", "implied_entities"):
+        value = source.get(key, [])
+        if isinstance(value, list):
+            specs.extend(value)
+    return specs
+
+
+def _resolve_implied_template(implied: Any, state: Any) -> dict[str, Any]:
+    if isinstance(implied, dict) and "entity" in implied:
+        return deepcopy(implied)
+
+    kind = _implied_kind(implied)
+    templates = state.script.get("implied_entity_templates", {})
+    if isinstance(templates, dict) and isinstance(templates.get(kind), dict):
+        return deepcopy(templates[kind])
+    return deepcopy(DEFAULT_IMPLIED_TEMPLATES.get(kind, {}))
+
+
+def _render_implied_entity(
+    template: dict[str, Any],
+    source_id: str,
+    source: dict[str, Any],
+    state: Any,
+) -> dict[str, Any]:
+    entity = template.get("entity", {})
+    if not isinstance(entity, dict):
+        entity = {}
+    return _render_source_value(entity, source_id, source, state)
+
+
+def _matches_implied_target(target_text: str, entity: dict[str, Any], implied: Any) -> bool:
+    names = [
+        _implied_kind(implied),
+        str(entity.get("name") or ""),
+        *[str(alias) for alias in entity.get("aliases", [])],
+        *[str(tag) for tag in entity.get("tags", [])],
+    ]
+    normalized = target_text.lower()
+    return any(name and (normalized in name.lower() or name.lower() in normalized) for name in names)
+
+
+def _implied_kind(implied: Any) -> str:
+    if isinstance(implied, str):
+        return implied
+    if isinstance(implied, dict):
+        return str(implied.get("kind") or implied.get("id") or implied.get("name") or "")
+    return ""
+
+
 def _projected_target(target_id: str, explicit_changes: StateChanges, state: Any) -> dict[str, Any]:
     target = deepcopy(state.entities.get(target_id, {}))
     for changes_key in ("entities", "set_entity_states"):
@@ -152,6 +255,27 @@ def _render_template(value: str, target_id: str, target: dict[str, Any], state: 
         value.replace("$target_id", target_id)
         .replace("$target_name", str(target.get("name") or target_id))
         .replace("$material", str(target.get("material") or "object"))
+        .replace("$turn_id", str(getattr(state, "turn_id", 0)))
+    )
+
+
+def _render_source_value(value: Any, source_id: str, source: dict[str, Any], state: Any) -> Any:
+    if isinstance(value, str):
+        return _render_source_template(value, source_id, source, state)
+    if isinstance(value, list):
+        return [_render_source_value(item, source_id, source, state) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(_render_source_value(key, source_id, source, state)): _render_source_value(item, source_id, source, state)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _render_source_template(value: str, source_id: str, source: dict[str, Any], state: Any) -> str:
+    return (
+        value.replace("$source_id", source_id)
+        .replace("$source_name", str(source.get("name") or source_id))
         .replace("$turn_id", str(getattr(state, "turn_id", 0)))
     )
 

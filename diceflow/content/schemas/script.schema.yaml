@@ -65,6 +65,17 @@ properties:
     type: array
     items:
       $ref: "#/$defs/derivation_rule"
+  implied_entity_templates:
+    type: object
+    additionalProperties:
+      type: object
+      required: [id_template, entity]
+      additionalProperties: false
+      properties:
+        id_template:
+          type: string
+        entity:
+          $ref: "#/$defs/entity"
   dc_modifiers:
     type: array
     items:

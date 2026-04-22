@@ -2,6 +2,7 @@ import unittest
 
 from diceflow.core.derivation import derive_state_changes
 from diceflow.core.state import GameState
+from diceflow.core.validator import validate
 from diceflow.scripting.loader import load_script
 
 
@@ -55,6 +56,19 @@ class DerivationTest(unittest.TestCase):
         changes = derive_state_changes(action, {"result": "success"}, explicit_changes, self.state)
 
         self.assertEqual(changes["spawn_entities"]["chest_1_debris_auto"]["name"], "already present")
+
+    def test_missing_target_can_be_resolved_from_implied_equipment(self) -> None:
+        self.state.entities["skeleton_1"]["implied_equipment"] = ["shield"]
+        action = {"type": "take", "target": "shield", "method": "", "tool": ""}
+
+        result = validate(action, self.state)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(action["target_id"], "skeleton_1_shield")
+        self.assertIn("skeleton_1_shield", self.state.entities)
+        shield = self.state.entities["skeleton_1_shield"]
+        self.assertEqual(shield["lifecycle"]["origin"]["kind"], "derived")
+        self.assertEqual(shield["lifecycle"]["origin"]["source_entity_id"], "skeleton_1")
 
 
 if __name__ == "__main__":
