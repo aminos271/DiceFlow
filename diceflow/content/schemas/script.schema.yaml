@@ -76,6 +76,39 @@ properties:
           type: string
         entity:
           $ref: "#/$defs/entity"
+  implied_entity_rules:
+    type: array
+    items:
+      type: object
+      required: [when, implies]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        when:
+          type: object
+          additionalProperties: false
+          properties:
+            source_terms:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+            target_terms:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+        implies:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: object
   dc_modifiers:
     type: array
     items:

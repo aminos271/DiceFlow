@@ -46,3 +46,9 @@ uploads/
 temp/
 qdrant_storage/
 plan/
+
+#==========================
+# AI
+#==========================
+.claude/
+CLAUDE.md

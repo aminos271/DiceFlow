@@ -57,6 +57,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "default_no_outcome_event": str,
     "derivation_rules": list,
     "implied_entity_templates": dict,
+    "implied_entity_rules": list,
 }
 
 
