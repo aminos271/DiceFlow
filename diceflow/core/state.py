@@ -3,6 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.core.lifecycle import (
+    cleanup_expired_entities,
+    initialize_entity,
+    mark_inventory_item,
+    mark_removed_entity,
+    prepare_spawned_entity,
+)
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
 
 
@@ -13,12 +20,13 @@ class GameState:
         self.player: dict[str, Any] = deepcopy(self.script["player"])
         self.scene: dict[str, Any] = deepcopy(self.script["scene"])
         self.entities: dict[str, dict[str, Any]] = {
-            entity_id: self._with_runtime_defaults(entity)
+            entity_id: initialize_entity(self._with_runtime_defaults(entity), entity_id, self.turn_id)
             for entity_id, entity in deepcopy(self.script["entities"]).items()
         }
         self.flags: dict[str, Any] = deepcopy(self.script["flags"])
         self.recent_events: list[str] = []
         self.history: list[dict[str, Any]] = []
+        self.entity_journal: list[dict[str, Any]] = []
 
     def get_snapshot(self) -> dict[str, Any]:
         return {
@@ -28,6 +36,7 @@ class GameState:
             "entities": deepcopy(self.entities),
             "flags": deepcopy(self.flags),
             "recent_events": list(self.recent_events[-5:]),
+            "entity_journal": deepcopy(self.entity_journal[-10:]),
         }
 
     def find_entity_id(self, target: str | None) -> str | None:
@@ -73,9 +82,23 @@ class GameState:
         self.player["hp"] = max(0, min(self.player["hp"], self.player["max_hp"]))
 
         for entity_id, entity in changes.get("spawn_entities", {}).items():
-            self.entities[entity_id] = self._with_runtime_defaults(materialize_entity(entity, entity_id))
+            spawned = self._with_runtime_defaults(materialize_entity(entity, entity_id))
+            self.entities[entity_id] = prepare_spawned_entity(
+                spawned,
+                entity_id,
+                self.turn_id,
+                origin_kind=str(entity.get("_origin_kind") or "spawned"),
+                source_action=str(entity.get("_source_action") or ""),
+                source_entity_id=str(entity.get("_source_entity_id") or ""),
+                rule_id=str(entity.get("_rule_id") or ""),
+            )
+            for internal_key in ("_origin_kind", "_source_action", "_source_entity_id", "_rule_id"):
+                self.entities[entity_id].pop(internal_key, None)
 
         for entity_id in changes.get("remove_entities", []):
+            entity = self.entities.get(entity_id)
+            if entity:
+                self.entity_journal.append(mark_removed_entity(entity_id, entity, self.turn_id))
             self.entities.pop(entity_id, None)
 
         for entity_id in changes.get("reveal_entities", []):
@@ -93,6 +116,7 @@ class GameState:
                 entity["hp"] = max(0, min(entity["hp"], entity.get("max_hp", entity["hp"])))
                 if entity["hp"] <= 0:
                     entity["alive"] = False
+            self._sync_lifecycle_phase(entity)
 
         for entity_id, entity_changes in changes.get("set_entity_states", {}).items():
             entity = self.entities.get(entity_id)
@@ -106,6 +130,7 @@ class GameState:
             item_name = str(entity.get("item_id") or entity.get("name") or entity_id)
             if item_name not in self.player.setdefault("inventory", []):
                 self.player["inventory"].append(item_name)
+            mark_inventory_item(entity, self.turn_id)
             entity["looted"] = True
             entity["available"] = False
             entity["visible"] = False
@@ -117,6 +142,8 @@ class GameState:
             self.recent_events.append(str(event))
         self.recent_events = self.recent_events[-10:]
 
+        self.entity_journal.extend(cleanup_expired_entities(self.entities, self.turn_id))
+        self.entity_journal = self.entity_journal[-50:]
         self._refresh_end_state()
 
     def record_turn(self, record: dict[str, Any]) -> None:
@@ -146,6 +173,20 @@ class GameState:
         if normalized.get("destroyed"):
             normalized["available"] = bool(entity.get("available", False))
         return normalized
+
+    def _sync_lifecycle_phase(self, entity: dict[str, Any]) -> None:
+        lifecycle = entity.get("lifecycle")
+        if not isinstance(lifecycle, dict):
+            return
+        if entity.get("looted"):
+            lifecycle["phase"] = "inventory"
+        elif entity.get("destroyed"):
+            lifecycle["phase"] = "destroyed"
+        elif not entity.get("visible", True) or not entity.get("available", True):
+            lifecycle["phase"] = "hidden"
+        else:
+            lifecycle["phase"] = "active"
+        lifecycle["updated_turn_id"] = self.turn_id
 
     def _refresh_end_state(self) -> None:
         for condition in self.script.get("ending_conditions", []):
