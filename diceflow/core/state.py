@@ -39,6 +39,42 @@ class GameState:
             "entity_journal": deepcopy(self.entity_journal[-10:]),
         }
 
+    def get_visible_entities(self) -> dict[str, dict[str, Any]]:
+        return {
+            entity_id: deepcopy(entity)
+            for entity_id, entity in self.entities.items()
+            if self.is_interactable_entity(entity_id)
+        }
+
+    def get_hostile_entities(self) -> dict[str, dict[str, Any]]:
+        return {
+            entity_id: deepcopy(entity)
+            for entity_id, entity in self.get_visible_entities().items()
+            if entity.get("hostile") or "hostile" in entity.get("tags", [])
+        }
+
+    def get_inventory_items(self) -> list[str]:
+        return [str(item) for item in self.player.get("inventory", [])]
+
+    def get_current_scene_id(self) -> str:
+        return str(self.script.get("id") or self.scene.get("id") or self.scene.get("name") or "")
+
+    def get_current_scene(self) -> dict[str, Any]:
+        return deepcopy(self.scene)
+
+    def get_available_action_hints(self) -> list[str]:
+        hints: list[str] = []
+
+        for action_type in self.script.get("scene_actions", {}):
+            hints.append(_scene_action_hint(str(action_type)))
+
+        for entity in self.get_visible_entities().values():
+            entity_name = str(entity.get("name") or "目标")
+            for action_type in _get_allowed_actions(entity):
+                hints.append(_entity_action_hint(str(action_type), entity_name))
+
+        return _dedupe_preserving_order(hints)
+
     def find_entity_id(self, target: str | None) -> str | None:
         if not target:
             return None
@@ -211,3 +247,44 @@ class GameState:
                 if entity.get(key) != expected:
                     return False
         return True
+
+
+def _entity_action_hint(action_type: str, entity_name: str) -> str:
+    verb = {
+        "attack": "攻击",
+        "inspect": "检查",
+        "open": "打开",
+        "talk": "交谈",
+        "take": "拿取",
+        "use": "使用道具处理",
+        "throw": "投掷道具砸向",
+        "interact": "互动",
+    }.get(action_type, action_type)
+    return f"{verb}{entity_name}"
+
+
+def _scene_action_hint(action_type: str) -> str:
+    return {
+        "flee": "撤退/拉开距离",
+        "wait": "等待/观察局势",
+        "move": "移动/靠近目标",
+        "unknown": "尝试其他行动",
+    }.get(action_type, action_type)
+
+
+def _get_allowed_actions(entity: dict[str, Any]) -> list[str]:
+    metadata = entity.get("metadata", {})
+    if "allowed_actions" in metadata:
+        return list(metadata["allowed_actions"])
+    return list(metadata.get("actions", {}).keys())
+
+
+def _dedupe_preserving_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-import json
+import sys
 from typing import Any
 
+from diceflow.app.ui import (
+    render_action_hints,
+    render_debug,
+    render_scene_panel,
+    render_status_panel,
+    render_turn_result,
+)
 from diceflow.core.models import TurnRecord
 from diceflow.core.rules import RuleEngine
 from diceflow.core.state import GameState
@@ -73,8 +80,6 @@ class Game:
 
 def print_intro(state: GameState) -> None:
     print(state.script.get("intro", "DiceFlow MVP。输入 q/quit/退出 结束。"))
-    print(state.scene["description"])
-    print(f"HP: {state.player['hp']}/{state.player['max_hp']}  物品: {'、'.join(state.player['inventory'])}")
 
 
 def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: bool = True) -> None:
@@ -82,6 +87,9 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
     print_intro(game.state)
 
     while not game.state.flags.get("game_over"):
+        print(render_status_panel(game.state))
+        print(render_scene_panel(game.state))
+        print(render_action_hints(game.state))
         try:
             player_input = input(">> ").strip()
         except EOFError:
@@ -95,19 +103,8 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
 
         record = game.run_turn(player_input)
         if debug:
-            print(
-                "[debug] "
-                + json.dumps(
-                    {
-                        "action": record.action,
-                        "validation": record.validation,
-                        "check": record.check,
-                        "changes": record.state_changes,
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        print(record.narration)
+            print(render_debug(record), file=sys.stderr)
+        print(render_turn_result(record))
 
     ending = game.state.flags.get("ending")
     if ending:
