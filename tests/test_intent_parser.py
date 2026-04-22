@@ -32,6 +32,13 @@ class IntentParserTest(unittest.TestCase):
         self.assertEqual(action["tool_id"], "铁钥匙")
         self.assertIn("careful", action["approach_tags"])
 
+    def test_throw_chest_at_skeleton(self) -> None:
+        action = heuristic_parse_intent("投掷木箱砸骷髅", self.game.state)
+
+        self.assertEqual(action["intent_family"], "throw")
+        self.assertEqual(action["target_id"], "skeleton_1")
+        self.assertEqual(action["tool_id"], "chest_1")
+
     def test_open_use_interact_boundaries(self) -> None:
         examples = {
             "我拨弄箱子的锁扣": "open",

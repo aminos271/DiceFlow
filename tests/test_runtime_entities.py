@@ -4,6 +4,7 @@ from diceflow.app.game import Game
 from diceflow.core.updater import update_state
 from diceflow.core.validator import validate
 from diceflow.scripting.loader import load_script
+from diceflow.scripting.resolver import resolve_action_spec
 
 
 class RuntimeEntitiesTest(unittest.TestCase):
@@ -53,30 +54,46 @@ class RuntimeEntitiesTest(unittest.TestCase):
             "method": "用木箱砸骷髅",
         }
         self.assertTrue(validate(smash, self.game.state)["valid"])
+        action_spec = resolve_action_spec(smash, self.game.state)
+        self.assertEqual(action_spec["scope"], "generic_rule")
 
         smash_changes = update_state(smash, {"result": "success"}, self.game.state)
         self.game.state.apply_changes(smash_changes)
 
         self.assertTrue(self.game.state.entities["chest_1"]["destroyed"])
         self.assertFalse(self.game.state.entities["chest_1"]["available"])
-        self.assertIn("chest_debris_1", self.game.state.entities)
-        self.assertTrue(self.game.state.entities["chest_debris_1"]["available"])
+        self.assertIn("chest_1_debris", self.game.state.entities)
+        self.assertTrue(self.game.state.entities["chest_1_debris"]["available"])
         self.assertTrue(self.game.state.entities["iron_key"]["visible"])
 
-        take_from_debris = {
+        take_revealed_key = {
             "type": "take",
-            "target": "残片",
-            "method": "从残片中翻找",
+            "target": "铁钥匙",
+            "method": "拿起铁钥匙",
             "tool": "",
         }
-        self.assertTrue(validate(take_from_debris, self.game.state)["valid"])
+        self.assertTrue(validate(take_revealed_key, self.game.state)["valid"])
 
-        take_changes = update_state(take_from_debris, {"result": "success"}, self.game.state)
+        take_changes = update_state(take_revealed_key, {"result": "success"}, self.game.state)
         self.game.state.apply_changes(take_changes)
         self.game.state.apply_changes(take_changes)
 
         self.assertEqual(self.game.state.player["inventory"].count("铁钥匙"), 1)
-        self.assertTrue(self.game.state.entities["chest_debris_1"]["looted"])
+        self.assertTrue(self.game.state.entities["iron_key"]["looted"])
+
+    def test_throw_chest_at_skeleton_uses_same_generic_rule(self) -> None:
+        throw = {
+            "type": "throw",
+            "target": "骷髅",
+            "tool": "木箱",
+            "method": "投掷木箱砸骷髅",
+        }
+        self.assertTrue(validate(throw, self.game.state)["valid"])
+
+        action_spec = resolve_action_spec(throw, self.game.state)
+
+        self.assertEqual(action_spec["scope"], "generic_rule")
+        self.assertEqual(action_spec["dc"], 10)
 
 
 if __name__ == "__main__":

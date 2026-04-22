@@ -25,8 +25,19 @@ class ScriptLoadingTest(unittest.TestCase):
 
         self.assertEqual(script["id"], "dungeon_corridor")
         self.assertIn("skeleton_1", script["entities"])
+        self.assertIn("generic_rules", script)
         self.assertIn("flee", script["scene_actions"])
         self.assertNotIn("flee", script["entities"]["skeleton_1"]["metadata"]["allowed_actions"])
+
+    def test_dungeon_corridor_uses_generic_rules_for_common_combat(self) -> None:
+        script = load_script("dungeon_corridor")
+        skeleton_actions = script["entities"]["skeleton_1"]["metadata"]["actions"]
+        rule_ids = {rule["id"] for rule in script["generic_rules"]}
+
+        self.assertNotIn("attack", skeleton_actions)
+        self.assertNotIn("use", skeleton_actions)
+        self.assertIn("attack_enemy", rule_ids)
+        self.assertIn("heavy_throwable_hits_fragile_enemy", rule_ids)
 
     def test_dungeon_corridor_entities_are_archetype_materialized(self) -> None:
         script = load_script("dungeon_corridor")
@@ -85,6 +96,16 @@ class ScriptLoadingTest(unittest.TestCase):
             validate_script(script)
 
         self.assertIn("schema_version must be 1", str(context.exception))
+
+    def test_validate_script_accepts_tag_only_entity(self) -> None:
+        script = load_script("tomb_entrance")
+        script["entities"]["loose_stone"] = {
+            "name": "松动石块",
+            "aliases": ["石块"],
+            "tags": ["movable", "heavy", "throwable"],
+        }
+
+        validate_script(script)
 
     def test_validate_script_rejects_action_without_outcomes(self) -> None:
         script = load_script("tomb_entrance")

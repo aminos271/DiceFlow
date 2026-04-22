@@ -7,18 +7,23 @@ from diceflow.scripting.resolver import get_allowed_actions, resolve_action_spec
 from diceflow.scripting.scene_rules import validate_scene_rules
 
 
-TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "talk", "take"}
+TARGET_REQUIRED_FAMILIES = {"attack", "open", "use", "throw", "talk", "take"}
 
 
 def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     action.update(normalize_action(action, state))
     intent_family = action_family(action)
-    if not _is_supported_action(intent_family, state):
-        return {"valid": False, "reason": f"暂不支持行动类型：{intent_family}"}
-
+    action_spec = resolve_action_spec(action, state)
     target = action.get("target")
     target_id = action.get("target_id") or (state.find_entity_id(str(target)) if target else None)
-    is_scene_action = intent_family in state.script.get("scene_actions", {})
+    if intent_family in TARGET_REQUIRED_FAMILIES and target and not target_id:
+        return {"valid": False, "reason": f"目标不存在或不明确：{target}"}
+    if not action_spec.get("outcomes"):
+        return {"valid": False, "reason": f"暂不支持行动类型：{intent_family}"}
+    action_scope = str(action_spec.get("scope") or "")
+    is_scene_action = action_scope == "scene"
+    is_generic_action = action_scope == "generic_rule"
+
     if _requires_target(intent_family, state) and not target_id:
         return {"valid": False, "reason": f"目标不存在或不明确：{target or '未提供'}"}
 
@@ -28,20 +33,19 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
             return {"valid": False, "reason": f"目标当前不可交互：{target or target_id}"}
         entity = state.entities[target_id]
         allowed_actions = get_allowed_actions(entity)
-        if intent_family not in allowed_actions:
+        if not is_generic_action and intent_family not in allowed_actions:
             return {
                 "valid": False,
                 "reason": f"{entity.get('name', target_id)}不能执行该行动：{intent_family}",
             }
-        state_result = _validate_entity_action_state(intent_family, entity)
-        if not state_result["valid"]:
-            return state_result
+        if not is_generic_action:
+            state_result = _validate_entity_action_state(intent_family, entity)
+            if not state_result["valid"]:
+                return state_result
     elif target_id:
         action["target_id"] = target_id
 
-    action_spec = resolve_action_spec(action, state)
-
-    if intent_family == "attack":
+    if intent_family == "attack" and target_id:
         if not state.entities[target_id].get("alive", True):
             return {"valid": False, "reason": "目标已经失去威胁。"}
 
@@ -69,15 +73,6 @@ def _validate_entity_action_state(intent_family: str, entity: dict[str, object])
         return {"valid": False, "reason": f"{entity_name}已经被拿走。"}
 
     return {"valid": True, "reason": ""}
-
-
-def _is_supported_action(intent_family: str, state: GameState) -> bool:
-    if intent_family in state.script.get("scene_actions", {}):
-        return True
-    return any(
-        state.is_interactable_entity(entity_id) and intent_family in get_allowed_actions(entity)
-        for entity_id, entity in state.entities.items()
-    )
 
 
 def _requires_target(intent_family: str, state: GameState) -> bool:

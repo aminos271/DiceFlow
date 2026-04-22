@@ -4,6 +4,7 @@ from typing import Any
 
 from diceflow.core.intent import action_family
 from diceflow.core.models import Action
+from diceflow.scripting.generic_rules import resolve_generic_action_spec
 
 
 Script = dict[str, Any]
@@ -27,10 +28,15 @@ def resolve_action_spec(action: Action, state: Any) -> dict[str, Any]:
     scope = "scene"
     action_spec: dict[str, Any] = {}
 
+    generic_action = resolve_generic_action_spec(action, state)
+    if generic_action:
+        scope = "generic_rule"
+        action_spec = generic_action
+
     if target_id and target_id in state.entities:
         entity = state.entities[target_id]
         entity_action = get_entity_action(state.script, entity, action_type)
-        if entity_action:
+        if entity_action and not action_spec:
             scope = "entity"
             action_spec = entity_action
     if not action_spec:
@@ -47,4 +53,3 @@ def resolve_action_spec(action: Action, state: Any) -> dict[str, Any]:
 
 def get_action_spec(action: Action, state: Any) -> dict[str, Any]:
     return resolve_action_spec(action, state)
-

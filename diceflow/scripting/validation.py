@@ -21,6 +21,8 @@ VALID_CHANGE_KEYS = {
     "set_entity_states",
 }
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
+VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
+VALID_GENERIC_RULE_KEYS = {"id", "when", *VALID_ACTION_KEYS}
 REQUIRED_TOP_LEVEL_KEYS = {
     "schema_version",
     "id",
@@ -46,6 +48,7 @@ TOP_LEVEL_TYPES = {
 OPTIONAL_TOP_LEVEL_TYPES = {
     "intro": str,
     "invalid_action_event": str,
+    "generic_rules": list,
     "action_rules": list,
     "dc_modifiers": list,
     "ending_texts": dict,
@@ -64,6 +67,13 @@ def validate_script(script: Script) -> None:
         if action_type not in CANONICAL_INTENT_FAMILIES:
             errors.append(f"scene_actions has non-canonical action: {action_type}")
         _validate_action_spec(f"scene_actions.{action_type}", action_spec, errors, has_target=False)
+
+    for index, rule in enumerate(script.get("generic_rules", [])):
+        _validate_generic_rule(f"generic_rules[{index}]", rule, errors)
+    for index, rule in enumerate(script.get("action_rules", [])):
+        _validate_when_condition(f"action_rules[{index}]", rule.get("when", {}), errors)
+    for index, modifier in enumerate(script.get("dc_modifiers", [])):
+        _validate_when_condition(f"dc_modifiers[{index}]", modifier.get("when", {}), errors)
 
     _validate_ending_conditions(script, errors)
 
@@ -94,7 +104,18 @@ def _validate_top_level(script: Script, errors: list[str]) -> None:
 
 
 def _validate_entity(entity_id: str, entity: dict[str, Any], errors: list[str]) -> None:
+    tags = entity.get("tags")
+    if tags is not None:
+        if not isinstance(tags, list):
+            errors.append(f"entities.{entity_id}.tags must be a list")
+        else:
+            for i, tag in enumerate(tags):
+                if not isinstance(tag, str):
+                    errors.append(f"entities.{entity_id}.tags[{i}] must be a string")
+
     metadata = entity.get("metadata")
+    if metadata is None:
+        return
     if not isinstance(metadata, dict):
         errors.append(f"entities.{entity_id}.metadata must exist")
         return
@@ -147,6 +168,21 @@ def _validate_action_spec(path: str, action_spec: dict[str, Any], errors: list[s
         _validate_changes(f"{path}.outcomes.{result}", changes, errors, has_target)
 
 
+def _validate_generic_rule(path: str, rule: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(rule, dict):
+        errors.append(f"{path} must be a dict")
+        return
+    unknown_keys = sorted(set(rule) - VALID_GENERIC_RULE_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path} has unsupported rule field: {key}")
+    if "when" not in rule:
+        errors.append(f"{path}.when is required")
+    else:
+        _validate_when_condition(path, rule["when"], errors)
+    action_spec = {key: value for key, value in rule.items() if key not in {"id", "when"}}
+    _validate_action_spec(path, action_spec, errors, has_target=True)
+
+
 def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has_target: bool) -> None:
     if not isinstance(changes, dict):
         errors.append(f"{path} must be a dict")
@@ -166,8 +202,8 @@ def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has
         errors.append(f"{path}.spawn_entities must be a dict")
     if "remove_entities" in changes and not isinstance(changes["remove_entities"], list):
         errors.append(f"{path}.remove_entities must be a list")
-    if "reveal_entities" in changes and not isinstance(changes["reveal_entities"], list):
-        errors.append(f"{path}.reveal_entities must be a list")
+    if "reveal_entities" in changes and not isinstance(changes["reveal_entities"], (list, str)):
+        errors.append(f"{path}.reveal_entities must be a list or string placeholder")
     if "move_item_to_inventory" in changes and not isinstance(changes["move_item_to_inventory"], list):
         errors.append(f"{path}.move_item_to_inventory must be a list")
     if "set_entity_states" in changes and not isinstance(changes["set_entity_states"], dict):
@@ -189,3 +225,11 @@ def _validate_ending_conditions(script: Script, errors: list[str]) -> None:
         unknown_keys = sorted(set(when) - VALID_ENDING_KEYS)
         for key in unknown_keys:
             errors.append(f"{path}.when has unsupported key: {key}")
+
+def _validate_when_condition(path: str, when: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(when, dict):
+        errors.append(f"{path}.when must be a dict")
+        return
+    unknown_keys = sorted(set(when) - VALID_WHEN_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path}.when has unsupported key: {key}")

@@ -57,6 +57,10 @@ properties:
     type: array
     items:
       $ref: "#/$defs/conditional_rule"
+  generic_rules:
+    type: array
+    items:
+      $ref: "#/$defs/generic_rule"
   dc_modifiers:
     type: array
     items:
@@ -104,6 +108,10 @@ $defs:
           type: string
       type:
         type: string
+      tags:
+        type: array
+        items:
+          type: string
       metadata:
         type: object
         required: [actions]
@@ -159,9 +167,11 @@ $defs:
         items:
           type: string
       reveal_entities:
-        type: array
-        items:
-          type: string
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
       move_item_to_inventory:
         type: array
         items:
@@ -180,6 +190,26 @@ $defs:
         type: boolean
       reason:
         type: string
+  generic_rule:
+    type: object
+    required: [when, dc, outcomes]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+      when:
+        $ref: "#/$defs/when"
+      dc:
+        type: integer
+      required_tools:
+        type: array
+        items:
+          type: string
+      outcomes:
+        type: object
+        minProperties: 1
+        additionalProperties:
+          $ref: "#/$defs/state_changes"
   when:
     type: object
     additionalProperties: false
@@ -213,6 +243,30 @@ $defs:
         additionalProperties:
           type: object
           additionalProperties: true
+      target_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_target_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
   ending_when:
     type: object
     additionalProperties: false

@@ -18,6 +18,7 @@ USE_VERBS = ["用", "插", "拧", "烧", "点燃"]
 ACTION_KEYWORDS = {
     "open": ["open", "开门", "开锁", "打开", "撬"],
     "attack": ["attack", "攻击", "打", "砍", "刺", "挥剑", "砸"],
+    "throw": ["throw", "投掷", "扔", "丢", "抛"],
     "take": ["take", "loot", "拿", "捡", "拾取", "取出", "翻找"],
     "interact": ["interact", "拨弄", "摆弄", "推动", "拉动", "触碰", "按下"],
     "inspect": ["inspect", "检查", "观察", "搜索", "看", "调查"],
@@ -120,12 +121,12 @@ def heuristic_parse_intent(player_input: str, state: GameState | None = None) ->
     tool = ""
     tool_id = ""
 
-    if intent_family == "use" and len(mentions) >= 2:
+    if intent_family in {"use", "throw"} and len(mentions) >= 2:
         tool = mentions[0]["name"]
         tool_id = mentions[0]["id"]
         target = mentions[-1]["name"]
         target_id = mentions[-1]["id"]
-    elif intent_family == "use" and mentions:
+    elif intent_family in {"use", "throw"} and mentions:
         if mentions[0].get("source") == "inventory":
             tool = mentions[0]["name"]
             tool_id = mentions[0]["id"]
@@ -159,7 +160,7 @@ def _infer_family(text: str, mentions: list[dict[str, str]]) -> str:
     if any(word in text for word in ["拨弄", "摆弄"]) and any(word in text for word in ["锁", "锁扣", "箱"]):
         return "open"
 
-    for family in ["take", "open", "attack", "inspect", "talk", "move", "flee", "wait", "interact"]:
+    for family in ["take", "open", "throw", "attack", "inspect", "talk", "move", "flee", "wait", "interact"]:
         if any(keyword in text.lower() for keyword in ACTION_KEYWORDS[family]):
             return family
     return "unknown"

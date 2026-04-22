@@ -130,6 +130,10 @@ entities:
     alive: true
     location: 入口
     hostile: true
+    tags:
+    - enemy
+    - human
+    - hostile
   left_door:
     name: 左门
     aliases:
@@ -247,6 +251,11 @@ entities:
     locked: true
     burnable: true
     weakened: false
+    tags:
+    - door
+    - openable
+    - locked
+    - stone
 scene_actions:
   flee:
     dc: 12

@@ -11,6 +11,7 @@ CANONICAL_INTENT_FAMILIES = {
     "interact",
     "open",
     "use",
+    "throw",
     "take",
     "attack",
     "talk",

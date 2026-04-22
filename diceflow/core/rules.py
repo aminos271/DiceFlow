@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 
+from diceflow.core.intent import normalize_action
 from diceflow.core.models import Action
 from diceflow.core.state import GameState
 from diceflow.scripting.resolver import resolve_action_spec
@@ -28,6 +29,7 @@ class RuleEngine:
         return {"dc": dc, "roll": roll, "result": result}
 
     def _dc_for(self, action: Action, state: GameState) -> int:
+        action.update(normalize_action(action, state))
         action_spec = resolve_action_spec(action, state)
         dc = int(action_spec.get("dc", 12))
         dc += get_dc_modifier(action, state)

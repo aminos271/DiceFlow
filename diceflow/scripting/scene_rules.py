@@ -7,7 +7,7 @@ from diceflow.core.state import GameState
 
 def validate_scene_rules(action: Action, state: GameState) -> dict[str, str | bool]:
     for rule in state.script.get("action_rules", []):
-        if _matches_when(rule.get("when", {}), action, state):
+        if matches_when(rule.get("when", {}), action, state):
             return {
                 "valid": bool(rule.get("valid", True)),
                 "reason": str(rule.get("reason", "")),
@@ -22,7 +22,7 @@ def get_dc_modifier(action: Action, state: GameState) -> int:
     modifier = 0
 
     for rule in state.script.get("dc_modifiers", []):
-        if _matches_when(rule.get("when", {}), action, state):
+        if matches_when(rule.get("when", {}), action, state):
             modifier += int(rule.get("modifier", 0))
 
     modifier += _approach_dc_modifier(action_type, action.get("approach_tags", []))
@@ -43,7 +43,7 @@ def _approach_dc_modifier(action_type: str, approach_tags: object) -> int:
     return modifier
 
 
-def _matches_when(when: object, action: Action, state: GameState) -> bool:
+def matches_when(when: object, action: Action, state: GameState) -> bool:
     if not isinstance(when, dict):
         return False
 
@@ -68,7 +68,37 @@ def _matches_when(when: object, action: Action, state: GameState) -> bool:
             if not _matches_object(state.entities.get(str(entity_id), {}), expected):
                 return False
 
+    target_tags = target.get("tags", [])
+    if "target_tags" in when and not _matches_all_tags(target_tags, when["target_tags"]):
+        return False
+    if "any_target_tags" in when and not _matches_any_tag(target_tags, when["any_target_tags"]):
+        return False
+
+    tool = _resolve_tool_entity(action, state)
+    tool_tags = tool.get("tags", [])
+    if "tool_tags" in when and not _matches_all_tags(tool_tags, when["tool_tags"]):
+        return False
+    if "any_tool_tags" in when and not _matches_any_tag(tool_tags, when["any_tool_tags"]):
+        return False
+
     return True
+
+
+def _resolve_tool_entity(action: Action, state: GameState) -> dict[str, object]:
+    tool_id = str(action.get("tool_id") or "")
+    if not tool_id:
+        return {}
+    if tool_id in state.entities:
+        return state.entities[tool_id]
+    for entity in state.entities.values():
+        names = [
+            str(entity.get("item_id") or ""),
+            str(entity.get("name") or ""),
+            *[str(alias) for alias in entity.get("aliases", [])],
+        ]
+        if tool_id in names:
+            return entity
+    return {}
 
 
 def _matches_value(actual: object, expected: object) -> bool:
@@ -84,3 +114,23 @@ def _matches_object(actual: dict[str, object], expected: object) -> bool:
         if actual.get(str(key)) != expected_value:
             return False
     return True
+
+
+def _matches_all_tags(entity_tags: list[str] | None, required_tags: object) -> bool:
+    if entity_tags is None:
+        entity_tags = []
+    if isinstance(required_tags, str):
+        required_tags = [required_tags]
+    elif not isinstance(required_tags, list):
+        return False
+    return all(tag in entity_tags for tag in required_tags)
+
+
+def _matches_any_tag(entity_tags: list[str] | None, required_tags: object) -> bool:
+    if entity_tags is None:
+        entity_tags = []
+    if isinstance(required_tags, str):
+        required_tags = [required_tags]
+    elif not isinstance(required_tags, list):
+        return False
+    return any(tag in entity_tags for tag in required_tags)

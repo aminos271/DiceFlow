@@ -25,150 +25,8 @@ entities:
     - 敌人
     metadata:
       allowed_actions:
-      - attack
-      - use
       - inspect
       actions:
-        attack:
-          dc: 11
-          outcomes:
-            critical_success:
-              entities:
-                $target:
-                  hp_delta: -6
-              events:
-              - 你精准击碎骷髅的核心，它瞬间散架。
-            success:
-              entities:
-                $target:
-                  hp_delta: -3
-              events:
-              - 你的攻击击中了骷髅。
-            fail:
-              player:
-                hp_delta: -1
-              events:
-              - 骷髅挡住攻击并反击。
-            critical_fail:
-              player:
-                hp_delta: -2
-              events:
-              - 你失去平衡，被骷髅重击。
-        use:
-          dc: 10
-          required_tools:
-          - 木箱
-          outcomes:
-            critical_success:
-              entities:
-                $target:
-                  hp_delta: -5
-              set_entity_states:
-                chest_1:
-                  destroyed: true
-                  available: false
-                  visible: false
-              spawn_entities:
-                chest_debris_1:
-                  name: 木箱残片
-                  aliases:
-                  - 残片
-                  - 碎片
-                  - 木箱残片
-                  type: container
-                  contents:
-                  - iron_key
-                  metadata:
-                    allowed_actions:
-                    - take
-                    - inspect
-                    actions:
-                      take:
-                        dc: 6
-                        outcomes:
-                          success:
-                            move_item_to_inventory:
-                            - iron_key
-                            flags:
-                              has_key: true
-                            set_entity_states:
-                              $target:
-                                looted: true
-                            events:
-                            - 你从木箱残片中翻出铁钥匙并收好。
-                          fail:
-                            events:
-                            - 碎木片遮住了钥匙，你需要再翻找一次。
-                      inspect:
-                        dc: 6
-                        outcomes:
-                          success:
-                            events:
-                            - 残片之间露出一把铁钥匙。
-              reveal_entities:
-              - iron_key
-              events:
-              - 你抡起木箱砸碎骷髅，箱体裂成残片，铁钥匙从里面露了出来。
-            success:
-              entities:
-                $target:
-                  hp_delta: -3
-              set_entity_states:
-                chest_1:
-                  destroyed: true
-                  available: false
-                  visible: false
-              spawn_entities:
-                chest_debris_1:
-                  name: 木箱残片
-                  aliases:
-                  - 残片
-                  - 碎片
-                  - 木箱残片
-                  type: container
-                  contents:
-                  - iron_key
-                  metadata:
-                    allowed_actions:
-                    - take
-                    - inspect
-                    actions:
-                      take:
-                        dc: 6
-                        outcomes:
-                          success:
-                            move_item_to_inventory:
-                            - iron_key
-                            flags:
-                              has_key: true
-                            set_entity_states:
-                              $target:
-                                looted: true
-                            events:
-                            - 你从木箱残片中翻出铁钥匙并收好。
-                          fail:
-                            events:
-                            - 碎木片遮住了钥匙，你需要再翻找一次。
-                      inspect:
-                        dc: 6
-                        outcomes:
-                          success:
-                            events:
-                            - 残片之间露出一把铁钥匙。
-              reveal_entities:
-              - iron_key
-              events:
-              - 木箱砸中骷髅后碎裂，残片散开，铁钥匙暴露出来。
-            fail:
-              player:
-                hp_delta: -1
-              events:
-              - 你没能抡稳木箱，骷髅趁机逼近。
-            critical_fail:
-              player:
-                hp_delta: -2
-              events:
-              - 木箱脱手撞在墙上，你被骷髅重击。
         inspect:
           dc: 10
           outcomes:
@@ -182,6 +40,10 @@ entities:
     max_hp: 5
     alive: true
     location: 走廊
+    tags:
+    - enemy
+    - fragile
+    - hostile
   chest_1:
     name: 木箱
     aliases:
@@ -201,6 +63,12 @@ entities:
       - 你确认这个木箱可能藏有物品。
     contents:
     - iron_key
+    tags:
+    - container
+    - movable
+    - heavy
+    - throwable
+    - improvised_weapon
   iron_key:
     name: 铁钥匙
     aliases:
@@ -221,6 +89,10 @@ entities:
       - 铁钥匙卡在木缝里，你需要再试一次。
       inspect_success_events:
       - 这是一把可以开启铁门的钥匙。
+    tags:
+    - item
+    - tool
+    - key
   iron_door:
     name: 铁门
     aliases:
@@ -254,6 +126,10 @@ entities:
       inspect_success_events:
       - 这是一扇厚重铁门，需要钥匙才能打开。
     locked: true
+    tags:
+    - door
+    - openable
+    - locked
 scene_actions:
   move:
     dc: 9
@@ -320,3 +196,105 @@ ending_conditions:
 - ending: timeout
   when:
     turn_id_gte: 20
+generic_rules:
+- id: attack_enemy
+  when:
+    intent_family: attack
+    target_tags: enemy
+  dc: 11
+  outcomes:
+    critical_success:
+      entities:
+        $target:
+          hp_delta: -6
+      events:
+      - 你精准击碎骷髅的核心，它瞬间散架。
+    success:
+      entities:
+        $target:
+          hp_delta: -3
+      events:
+      - 你的攻击击中了骷髅。
+    fail:
+      player:
+        hp_delta: -1
+      events:
+      - 骷髅挡住攻击并反击。
+    critical_fail:
+      player:
+        hp_delta: -2
+      events:
+      - 你失去平衡，被骷髅重击。
+- id: heavy_throwable_hits_fragile_enemy
+  when:
+    intent_family:
+    - use
+    - throw
+    target_tags:
+    - enemy
+    - fragile
+    tool_tags:
+    - heavy
+    - throwable
+  dc: 10
+  outcomes:
+    critical_success:
+      entities:
+        $target:
+          hp_delta: -5
+      set_entity_states:
+        $tool:
+          destroyed: true
+          available: false
+          visible: false
+      spawn_entities:
+        $tool_debris:
+          name: $tool_name残片
+          aliases:
+          - 残片
+          - 碎片
+          - $tool_name残片
+          type: container
+          tags:
+          - debris
+          - container
+          - searchable
+          contents: $tool_contents
+      reveal_entities: $tool_contents
+      events:
+      - 你抡起$tool_name砸碎$target_name，$tool_name裂成残片，里面的东西露了出来。
+    success:
+      entities:
+        $target:
+          hp_delta: -3
+      set_entity_states:
+        $tool:
+          destroyed: true
+          available: false
+          visible: false
+      spawn_entities:
+        $tool_debris:
+          name: $tool_name残片
+          aliases:
+          - 残片
+          - 碎片
+          - $tool_name残片
+          type: container
+          tags:
+          - debris
+          - container
+          - searchable
+          contents: $tool_contents
+      reveal_entities: $tool_contents
+      events:
+      - $tool_name砸中$target_name后碎裂，残片散开，里面的东西暴露出来。
+    fail:
+      player:
+        hp_delta: -1
+      events:
+      - 你没能抡稳$tool_name，$target_name趁机逼近。
+    critical_fail:
+      player:
+        hp_delta: -2
+      events:
+      - $tool_name脱手撞在墙上，你被$target_name重击。
