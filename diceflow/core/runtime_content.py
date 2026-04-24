@@ -96,6 +96,11 @@ def validate_runtime_patch(patch: object, hook: dict[str, Any], state: GameState
         return None
 
 
+def sanitize_add_entity_op(op: dict[str, Any], allowed_entity_types: set[str], max_dc: int) -> dict[str, Any]:
+    entity = _sanitize_entity(op.get("entity"), allowed_entity_types, max_dc)
+    return {"op": "add_entity", "id": str(op.get("id") or ""), "entity": entity}
+
+
 def _matches_hook(hook: object, action: Action, check: CheckResult, state: GameState) -> bool:
     if not isinstance(hook, dict):
         return False

@@ -10,7 +10,7 @@ from diceflow.scripting.validation import validate_script
 Script = dict[str, Any]
 RuntimeScriptPatch = dict[str, Any]
 
-SUPPORTED_OPS = {"add_entity", "set_flag"}
+SUPPORTED_OPS = {"add_entity", "set_flag", "set_scene", "add_scene_action"}
 
 
 def apply_runtime_script_patch(script: Script, patch: RuntimeScriptPatch) -> Script:
@@ -27,6 +27,13 @@ def apply_runtime_script_patch(script: Script, patch: RuntimeScriptPatch) -> Scr
             runtime_script.setdefault("entities", {})[entity_id] = materialize_entity(op["entity"], entity_id)
         elif op_name == "set_flag":
             runtime_script.setdefault("flags", {})[op["key"]] = op["value"]
+        elif op_name == "set_scene":
+            runtime_script["scene"] = deepcopy(op["scene"])
+        elif op_name == "add_scene_action":
+            action = op["action"]
+            if action in runtime_script.get("scene_actions", {}):
+                raise ValueError(f"runtime script patch cannot overwrite existing scene action: {action}")
+            runtime_script.setdefault("scene_actions", {})[action] = deepcopy(op["spec"])
         else:
             raise ValueError(f"unsupported runtime script patch op: {op_name}")
 
@@ -71,6 +78,21 @@ def normalize_runtime_script_patch(patch: RuntimeScriptPatch) -> RuntimeScriptPa
             if not key:
                 raise ValueError(f"runtime_script_patch.ops[{index}].key is required")
             ops.append({"op": op_name, "key": key, "value": deepcopy(raw_op.get("value"))})
+        elif op_name == "set_scene":
+            scene = raw_op.get("scene")
+            if not isinstance(scene, dict):
+                raise ValueError(f"runtime_script_patch.ops[{index}].scene must be a dict")
+            if not isinstance(scene.get("name"), str) or not isinstance(scene.get("description"), str):
+                raise ValueError(f"runtime_script_patch.ops[{index}].scene requires name and description")
+            ops.append({"op": op_name, "scene": deepcopy(scene)})
+        elif op_name == "add_scene_action":
+            action = str(raw_op.get("action") or "").strip()
+            spec = raw_op.get("spec")
+            if not action:
+                raise ValueError(f"runtime_script_patch.ops[{index}].action is required")
+            if not isinstance(spec, dict):
+                raise ValueError(f"runtime_script_patch.ops[{index}].spec must be a dict")
+            ops.append({"op": op_name, "action": action, "spec": deepcopy(spec)})
 
     return {
         "id": patch_id,

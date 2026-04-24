@@ -155,6 +155,34 @@ properties:
           type: integer
           minimum: 5
           maximum: 30
+  world:
+    type: object
+    additionalProperties: false
+    properties:
+      premise:
+        type: string
+      tone:
+        type: string
+      allowed_scene_types:
+        type: array
+        items:
+          type: string
+      allowed_entity_types:
+        type: array
+        items:
+          type: string
+      forbidden:
+        type: array
+        items:
+          type: string
+      max_runtime_dc:
+        type: integer
+        minimum: 5
+        maximum: 30
+      max_new_entities_per_transition:
+        type: integer
+        minimum: 0
+        maximum: 8
   entities:
     type: object
     additionalProperties:

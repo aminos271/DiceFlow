@@ -97,6 +97,14 @@ derivation_rules:
                   hp_delta: -1
                 events:
                 - 你翻动尸体时被破裂甲片划伤，没有找到钥匙。
+world:
+  premise: 玩家被困在古墓中，必须找到出口逃出。
+  tone: 阴森、紧迫
+  allowed_scene_types: [corridor, chamber, hall, passage]
+  allowed_entity_types: [pickup, container, npc, obstacle]
+  forbidden: []
+  max_runtime_dc: 14
+  max_new_entities_per_transition: 3
 ending_texts:
   victory: 守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。
   death: 你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。

@@ -18,7 +18,7 @@ DIFFICULTY_DC = {
 VALID_PLAUSIBILITY = {"reasonable", "unlikely", "impossible"}
 VALID_DIFFICULTY = {"easy", "medium", "hard", "impossible"}
 VALID_RISK = {"low", "medium", "high"}
-VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social", "discover", "create_environment"}
+VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social", "discover", "create_environment", "transition"}
 
 # Safe types for dynamically spawned entities (whitelist, not arbitrary types)
 SAFE_SPAWN_TYPES = {"container", "item", "clue", "obstacle"}
@@ -135,19 +135,24 @@ class DynamicAdjudicator:
                     changes["runtime_script_patch"] = _runtime_patch_for_spawn(spawn, state)
             return changes
 
-        # Discover failure — no HP cost, different narrative
-        if intent_kind == "discover":
-            discover_fail: StateChanges = {"flags": {"dynamic_adjudication_used": True}}
+        # Discover / Transition failure — no HP cost, different narrative
+        if intent_kind in {"discover", "transition"}:
+            fail_changes: StateChanges = {"flags": {"dynamic_adjudication_used": True}}
             if result == "critical_fail":
-                discover_fail["flags"]["heightened_alert"] = True
-                discover_fail["events"] = ["你弄出了声响，可能引起了注意。"]
+                fail_changes["flags"]["heightened_alert"] = True
+                fail_changes["events"] = ["你发出了声响，前路暂时不明。" if intent_kind == "transition" else "你弄出了声响，可能引起了注意。"]
             else:
-                discover_fail["events"] = ["你没有找到明确线索，但对周围环境有了更多了解。"]
-            return discover_fail
+                fail_changes["events"] = ["你没有找到明确的通路，需要再观察一下。" if intent_kind == "transition" else "你没有找到明确线索，但对周围环境有了更多了解。"]
+            return fail_changes
 
         entity_changes: dict[str, dict[str, Any]] = {}
         if target_id and target_id in state.entities:
             entity_changes[target_id] = {"alert": True}
+        elif not state.get_hostile_entities():
+            return {
+                "flags": {"dynamic_adjudication_used": True},
+                "events": [f"{method}没有立刻奏效，你需要先找到更明确的路径或目标。"],
+            }
 
         hp_loss = 2 if result == "critical_fail" or risk == "high" else 1
         return {
@@ -278,6 +283,18 @@ def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
             }
         )
 
+    # transition — moving through an open door into a new area
+    target_entity = state.entities.get(str(action.get("target_id") or ""), {})
+    target_is_exit = target_entity.get("opened") or target_entity.get("type") == "door"
+    method_has_transition = any(term in method for term in ["进入", "进去", "穿过", "走进", "前进", "探索"])
+    if target_is_exit or (method_has_transition and (state.flags.get("door_open") or state.flags.get("scene_is_open"))):
+        return _sanitize_assessment({
+            "plausibility": "reasonable",
+            "difficulty": "easy",
+            "risk": "low",
+            "intent_kind": "transition",
+        })
+
     # create_environment — player constructing / rearranging surroundings
     if any(term in method for term in ["设置", "制造", "布置", "堆", "堵", "挡住", "拦住"]):
         return _sanitize_assessment(
@@ -357,6 +374,11 @@ def _success_changes(
         return {
             "flags": flags,
             "events": [f"你改变了当前环境。"],
+        }
+    elif intent_kind == "transition":
+        return {
+            "flags": {**flags, "scene_transition": True},
+            "events": [f"你穿过{target_name}，进入了新的区域。"],
         }
     elif intent_kind == "use":
         smoke_id = f"dynamic_smoke_{state.turn_id}"

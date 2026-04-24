@@ -39,6 +39,7 @@ class LLMClient:
         self.intent_prompt = (PROMPT_DIR / "intent_parser.txt").read_text(encoding="utf-8")
         self.narrator_prompt = (PROMPT_DIR / "narrator.txt").read_text(encoding="utf-8")
         self.dynamic_content_prompt = (PROMPT_DIR / "dynamic_content_generator.txt").read_text(encoding="utf-8")
+        self.dynamic_world_prompt = (PROMPT_DIR / "dynamic_world_generator.txt").read_text(encoding="utf-8")
 
     def parse_intent(self, player_input: str, state: GameState) -> Action:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
@@ -120,6 +121,36 @@ class LLMClient:
                             "max_dc": hook.get("max_dc", 15),
                             "existing_entity_ids": list(state.entities),
                             "state": _compact_state(state),
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
+    def generate_dynamic_world(
+        self,
+        world: dict[str, Any],
+        action: Action,
+        validation: dict[str, Any],
+        state: GameState,
+    ) -> dict[str, Any]:
+        content = self._chat(
+            [
+                {"role": "system", "content": self.dynamic_world_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "world": world,
+                            "scene": state.scene,
+                            "action": action,
+                            "validation": validation,
+                            "state": _compact_state(state),
+                            "existing_scene_actions": list(state.script.get("scene_actions", {})),
+                            "existing_entity_ids": list(state.entities),
                         },
                         ensure_ascii=False,
                     ),
@@ -312,14 +343,20 @@ def _compact_state(state: GameState) -> dict[str, Any]:
     snapshot = state.get_snapshot()
     return {
         "player": snapshot["player"],
-        "scene": snapshot["scene"],
+        "scene": {
+            **snapshot["scene"],
+            "visible_entities": [
+                str(entity.get("name") or entity_id)
+                for entity_id, entity in state.get_visible_entities().items()
+            ],
+        },
         "entities": {
             entity_id: {
                 key: value
                 for key, value in entity.items()
                 if key not in {"aliases", "max_hp"}
             }
-            for entity_id, entity in snapshot["entities"].items()
+            for entity_id, entity in state.get_visible_entities().items()
         },
         "flags": snapshot["flags"],
         "recent_events": snapshot["recent_events"],

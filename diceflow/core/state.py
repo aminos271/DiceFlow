@@ -53,6 +53,8 @@ class GameState:
         for op in normalized["ops"]:
             if op["op"] == "set_flag":
                 self.flags[op["key"]] = op["value"]
+            elif op["op"] == "set_scene":
+                self.scene = deepcopy(op["scene"])
         for entity_id, entity in added_entities.items():
             self.entities[entity_id] = initialize_entity(
                 self._with_runtime_defaults(deepcopy(entity)),

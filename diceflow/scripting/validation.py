@@ -36,6 +36,15 @@ VALID_RUNTIME_GENERATION_HOOK_KEYS = {
     "allowed_entity_types",
     "max_dc",
 }
+VALID_WORLD_KEYS = {
+    "premise",
+    "tone",
+    "allowed_scene_types",
+    "allowed_entity_types",
+    "forbidden",
+    "max_runtime_dc",
+    "max_new_entities_per_transition",
+}
 REQUIRED_TOP_LEVEL_KEYS = {
     "schema_version",
     "id",
@@ -72,6 +81,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "implied_entity_rules": list,
     "dynamic_entity_templates": dict,
     "runtime_generation_hooks": list,
+    "world": dict,
 }
 
 
@@ -95,6 +105,8 @@ def validate_script(script: Script) -> None:
         _validate_reaction_rule(f"reaction_rules[{index}]", rule, errors)
     for index, hook in enumerate(script.get("runtime_generation_hooks", [])):
         _validate_runtime_generation_hook(f"runtime_generation_hooks[{index}]", hook, errors)
+    if "world" in script:
+        _validate_world("world", script["world"], errors)
     for index, rule in enumerate(script.get("action_rules", [])):
         _validate_when_condition(f"action_rules[{index}]", rule.get("when", {}), errors)
     for index, modifier in enumerate(script.get("dc_modifiers", [])):
@@ -271,6 +283,29 @@ def _validate_runtime_generation_hook(path: str, hook: dict[str, Any], errors: l
     max_dc = hook.get("max_dc", 15)
     if not isinstance(max_dc, int) or max_dc < 5 or max_dc > 30:
         errors.append(f"{path}.max_dc must be an int between 5 and 30")
+
+
+def _validate_world(path: str, world: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(world, dict):
+        errors.append(f"{path} must be a dict")
+        return
+    unknown_keys = sorted(set(world) - VALID_WORLD_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path} has unsupported world field: {key}")
+    if not isinstance(world.get("premise", ""), str):
+        errors.append(f"{path}.premise must be a string")
+    if not isinstance(world.get("tone", ""), str):
+        errors.append(f"{path}.tone must be a string")
+    for list_key in ("allowed_scene_types", "allowed_entity_types", "forbidden"):
+        value = world.get(list_key, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            errors.append(f"{path}.{list_key} must be a string list")
+    max_dc = world.get("max_runtime_dc", 15)
+    if not isinstance(max_dc, int) or max_dc < 5 or max_dc > 30:
+        errors.append(f"{path}.max_runtime_dc must be an int between 5 and 30")
+    max_entities = world.get("max_new_entities_per_transition", 4)
+    if not isinstance(max_entities, int) or max_entities < 0 or max_entities > 8:
+        errors.append(f"{path}.max_new_entities_per_transition must be an int between 0 and 8")
 
 
 def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has_target: bool) -> None:

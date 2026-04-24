@@ -7,6 +7,7 @@ from diceflow.app.game import Game
 from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.models import CheckResult
 from diceflow.core.rules import RuleEngine
+from diceflow.llm.client import _compact_state
 from diceflow.scripting.loader import load_script
 from diceflow.scripting.resolver import resolve_action_spec
 
@@ -240,6 +241,134 @@ class DynamicAdjudicatorTest(unittest.TestCase):
                     "spawn_entities", record.state_changes,
                     f"'{input_text}' success should spawn entities",
                 )
+
+    def test_targetless_dynamic_failure_without_hostiles_does_not_revive_guard(self) -> None:
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
+        self.assertFalse(game.state.entities["guard_1"]["alive"])
+        self.assertEqual(game.state.get_hostile_entities(), {})
+
+        action: dict[str, Any] = {
+            "intent_family": "move",
+            "type": "move",
+            "target": "内部",
+            "target_id": "",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "进入内部",
+            "method": "进入内部",
+        }
+        check: CheckResult = {
+            "dc": 17,
+            "roll": 12,
+            "result": "fail",
+            "dynamic": True,
+            "assessment": {
+                "intent_kind": "improvised",
+                "risk": "high",
+                "difficulty": "hard",
+                "plausibility": "reasonable",
+            },
+        }
+
+        changes = DynamicAdjudicator().update_state(action, check, game.state)
+
+        self.assertNotIn("player", changes)
+        self.assertEqual(changes.get("entities", {}), {})
+        self.assertFalse(game.state.entities["guard_1"]["alive"])
+        events = " ".join(changes.get("events", []))
+        self.assertNotIn("识破", events)
+        self.assertNotIn("反制", events)
+
+    def test_compact_state_excludes_dead_unavailable_guard_from_narrator_context(self) -> None:
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
+
+        compact = _compact_state(game.state)
+
+        self.assertNotIn("guard_1", compact["entities"])
+        self.assertNotIn("守卫", compact["scene"]["visible_entities"])
+
+
+    def test_transition_through_open_door_does_not_mark_entity_distracted(self) -> None:
+        """Moving through an open door should get intent_kind=transition and not mark entities."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        adj = DynamicAdjudicator(random.Random(0))
+
+        # Set up: door is already open
+        game.state.flags["door_open"] = True
+        game.state.entities["left_door"]["opened"] = True
+        game.state.entities["left_door"]["locked"] = False
+
+        action: dict[str, Any] = {
+            "intent_family": "move",
+            "type": "move",
+            "target": "左门",
+            "target_id": "left_door",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "进入左门后的通道",
+            "method": "进入左门后的通道",
+        }
+
+        assessment = adj.assess(action, game.state)
+        self.assertEqual(assessment["intent_kind"], "transition")
+
+        check = adj.resolve(assessment)
+        changes = adj.update_state(action, check, game.state)
+
+        entities = changes.get("entities", {})
+        self.assertEqual(entities, {}, "Transition should not mark any entity as distracted")
+        self.assertTrue(changes.get("flags", {}).get("scene_transition", False))
+
+    def test_transition_failure_no_hp_damage(self) -> None:
+        """Transition failure should not deduct HP."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        adj = DynamicAdjudicator(random.Random(0))
+
+        game.state.flags["door_open"] = True
+        game.state.entities["left_door"]["opened"] = True
+
+        action: dict[str, Any] = {
+            "intent_family": "move",
+            "type": "move",
+            "target": "左门",
+            "target_id": "left_door",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "进入左门后的通道",
+            "method": "进入左门后的通道",
+        }
+
+        for result, expected_substring in [
+            ("fail", "没有找到明确的通路"),
+            ("critical_fail", "发出了声响"),
+        ]:
+            check: CheckResult = {
+                "dc": 9,
+                "roll": 3 if result == "fail" else 1,
+                "result": result,
+                "dynamic": True,
+                "assessment": {
+                    "intent_kind": "transition",
+                    "risk": "low",
+                    "difficulty": "easy",
+                    "plausibility": "reasonable",
+                },
+            }
+            changes = adj.update_state(action, check, game.state)
+            self.assertNotIn(
+                "player", changes,
+                f"Transition {result} should not deduct HP",
+            )
+            events = " ".join(changes.get("events", []))
+            self.assertIn(
+                expected_substring, events,
+                f"Transition {result} events should contain '{expected_substring}', got: {events}",
+            )
 
 
 if __name__ == "__main__":

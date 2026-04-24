@@ -12,6 +12,7 @@ from diceflow.app.ui import (
     render_turn_result,
 )
 from diceflow.core.adjudicator import DynamicAdjudicator
+from diceflow.core.dynamic_world import dynamic_world_phase
 from diceflow.core.models import TurnRecord
 from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
@@ -35,6 +36,35 @@ class Game:
         turn_id = self.state.advance_turn()
         action = parse_intent(player_input, self.state, self.llm)
         validation = validate(action, self.state)
+
+        world_changes = dynamic_world_phase(action, validation, self.state, self.llm)
+        if world_changes:
+            check = {
+                "dc": 0,
+                "roll": 0,
+                "result": "success",
+                "dynamic": True,
+                "assessment": {"intent_kind": "transition"},
+            }
+            self.state.apply_changes(world_changes)
+            narration = narrate(action, check, world_changes, self.state, self.llm)
+            summary = _make_summary(action, check, world_changes)
+            record = TurnRecord(
+                turn_id=turn_id,
+                player_input=player_input,
+                action=action,
+                validation={
+                    "valid": True,
+                    "reason": "dynamic_world",
+                    "fallback_reason": validation.get("reason", ""),
+                },
+                check=check,
+                state_changes=world_changes,
+                narration=narration,
+                summary=summary,
+            )
+            self.state.record_turn(record.to_dict())
+            return record
 
         if self.adjudicator.can_adjudicate(action, validation, self.state):
             assessment = self.adjudicator.assess(action, self.state, self.llm)
