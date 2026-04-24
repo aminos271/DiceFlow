@@ -84,6 +84,7 @@ class LLMClient:
                         "你是 TRPG 动态裁定助手，只做定性评估，不决定数值结果。"
                         "只输出 JSON：plausibility, difficulty, risk, intent_kind。"
                         "difficulty 只能是 easy、medium、hard、impossible。"
+                        "如果合理，JSON 里可以加 spawn_entities 字段来描述生成的新实体（只能生成 container / item / clue / obstacle 类型）。"
                         "禁止让玩家直接通关、秒杀 Boss、无成本获得神器、修改主线设定或跳过核心挑战。"
                     ),
                 },

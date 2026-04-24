@@ -128,6 +128,11 @@ properties:
     type: object
     additionalProperties:
       type: string
+  dynamic_entity_templates:
+    type: object
+    additionalProperties:
+      type: object
+      description: Keyed by intent_kind (discover, create_environment, etc.)
   entities:
     type: object
     additionalProperties:

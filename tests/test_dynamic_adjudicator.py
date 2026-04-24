@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from diceflow.app.game import Game
 from diceflow.core.adjudicator import DynamicAdjudicator
+from diceflow.core.rules import RuleEngine
 from diceflow.scripting.loader import load_script
 
 
@@ -61,6 +62,54 @@ class DynamicAdjudicatorTest(unittest.TestCase):
         self.assertEqual(record.check["result"], "impossible")
         self.assertEqual(record.check["assessment"]["difficulty"], "impossible")
         self.assertFalse(game.state.flags["game_over"])
+
+    def test_discover_secret_then_open_it(self) -> None:
+        """Turn 1: '检查墙上有没有暗格' → discover + spawn secret compartment.
+        Turn 2: '打开暗格' → open the dynamically created container.
+        """
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        # Turn 1 — discover a secret compartment
+        record = game.run_turn("检查墙上有没有暗格")
+
+        self.assertTrue(record.validation["valid"])
+        self.assertEqual(record.validation["reason"], "dynamic_adjudication")
+        self.assertEqual(record.check["assessment"]["intent_kind"], "discover")
+        self.assertEqual(record.check["result"], "success")
+        self.assertIn("spawn_entities", record.state_changes)
+
+        spawned_id: str | None = None
+        for eid, entity in game.state.entities.items():
+            if "dynamic" in entity.get("tags", []):
+                spawned_id = eid
+                break
+        self.assertIsNotNone(spawned_id)
+        spawned_id = str(spawned_id)
+        self.assertEqual(game.state.entities[spawned_id]["type"], "container")
+        self.assertTrue(game.state.entities[spawned_id]["visible"])
+        self.assertTrue(game.state.entities[spawned_id]["available"])
+
+        # Turn 2 — open the discovered compartment
+        open_action = {
+            "intent_family": "open",
+            "type": "open",
+            "target": str(game.state.entities[spawned_id].get("name", "暗格")),
+            "target_id": spawned_id,
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "打开暗格",
+            "method": "打开暗格",
+        }
+        game.rules = RuleEngine(random.Random(0))
+
+        with patch("diceflow.app.game.parse_intent", return_value=open_action):
+            record2 = game.run_turn("打开暗格")
+
+        self.assertEqual(record2.action["intent_family"], "open")
+        self.assertEqual(record2.check["result"], "success")
+        self.assertTrue(game.state.entities[spawned_id].get("opened"))
 
 
 if __name__ == "__main__":

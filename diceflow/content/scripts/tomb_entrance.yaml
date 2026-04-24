@@ -101,6 +101,18 @@ ending_texts:
   victory: 守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。
   death: 你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。
   timeout: 你拖得太久，古墓深处传来沉重机关声，退路被封死。
+dynamic_entity_templates:
+  discover:
+    type: container
+    name: 暗格
+    aliases: [暗格, 隐藏格]
+    tags: [container, dynamic]
+    contents: []
+  create_environment:
+    type: container
+    name: 障碍物
+    aliases: [障碍, 障碍物]
+    tags: [container, obstacle, dynamic]
 entities:
   guard_1:
     name: 守卫

@@ -61,6 +61,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "reaction_rules": list,
     "implied_entity_templates": dict,
     "implied_entity_rules": list,
+    "dynamic_entity_templates": dict,
 }
 
 

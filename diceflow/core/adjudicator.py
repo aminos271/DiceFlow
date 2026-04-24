@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from copy import deepcopy
 from typing import Any
 
 from diceflow.core.intent import action_family
@@ -17,7 +18,16 @@ DIFFICULTY_DC = {
 VALID_PLAUSIBILITY = {"reasonable", "unlikely", "impossible"}
 VALID_DIFFICULTY = {"easy", "medium", "hard", "impossible"}
 VALID_RISK = {"low", "medium", "high"}
-VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social"}
+VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social", "discover", "create_environment"}
+
+# Safe types for dynamically spawned entities (whitelist, not arbitrary types)
+SAFE_SPAWN_TYPES = {"container", "item", "clue", "obstacle"}
+
+# Allowed keys for dynamically spawned entity specs
+SAFE_SPAWN_ALLOWED_KEYS = frozenset({"name", "aliases", "type", "tags", "contents", "metadata", "hooks", "lifecycle"})
+
+# Minimal fallback for dynamic entity spawning when no script template exists.
+FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
 
 
 class DynamicAdjudicator:
@@ -27,23 +37,12 @@ class DynamicAdjudicator:
         self.rng = rng or random.Random()
 
     def can_adjudicate(self, action: Action, validation: dict[str, Any], state: GameState) -> bool:
-        if validation.get("valid") and action_family(action) != "unknown":
-            return False
         if state.flags.get("game_over"):
             return False
-
-        target_id = str(action.get("target_id") or "")
-        if not target_id or target_id not in state.entities:
+        # Script-defined valid actions take priority — skip adjudication.
+        if validation.get("valid") and action_family(action) != "unknown":
             return False
-
-        target = state.entities[target_id]
-        if not target.get("alive", True):
-            return False
-
-        # MVP boundary: only improvise around live guards/enemies for now.
-        tags = set(target.get("tags", []))
-        names = [str(target.get("name") or ""), *[str(alias) for alias in target.get("aliases", [])]]
-        return "enemy" in tags or any("守卫" in name or "guard" in name.lower() for name in names)
+        return True
 
     def assess(self, action: Action, state: GameState, llm: Any | None = None) -> dict[str, str]:
         if llm and hasattr(llm, "evaluate_dynamic_action"):
@@ -102,7 +101,16 @@ class DynamicAdjudicator:
             }
 
         if result in {"critical_success", "success"}:
-            return _success_changes(action, state, target_id, target_name, method, intent_kind, result)
+            changes = _success_changes(action, state, target_id, target_name, method, intent_kind, result)
+            spawn = assessment.get("spawn_entities", {})
+            if isinstance(spawn, dict) and spawn:
+                spawn_changes = changes.setdefault("spawn_entities", {})
+                spawn_changes.update(deepcopy(spawn))
+            elif intent_kind in {"discover", "create_environment"}:
+                spawn = _resolve_dynamic_spawn_from_script(intent_kind, state)
+                if spawn:
+                    changes["spawn_entities"] = spawn
+            return changes
 
         hp_loss = 2 if result == "critical_fail" or risk == "high" else 1
         return {
@@ -130,12 +138,63 @@ def _sanitize_assessment(raw: object) -> dict[str, str]:
     if plausibility == "impossible":
         difficulty = "impossible"
 
-    return {
+    result: dict[str, Any] = {
         "plausibility": plausibility,
         "difficulty": difficulty,
         "risk": risk,
         "intent_kind": intent_kind,
     }
+
+    # Pass through spawn_entities if safely defined
+    if isinstance(data, dict):
+        spawn = _sanitize_spawn_spec(data.get("spawn_entities"))
+        if spawn:
+            result["spawn_entities"] = spawn
+
+    return result
+
+
+def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
+    """Validate and sanitize a spawn_entities definition.
+
+    Only allows container / item / clue / obstacle types and a whitelist
+    of safe keys.  All spawned entities are marked ``category: persistent``
+    so they survive beyond the current turn.
+    """
+    if not isinstance(spawn, dict):
+        return {}
+
+    safe_specs: dict[str, dict[str, Any]] = {}
+    for entity_id, spec in spawn.items():
+        if not isinstance(spec, dict):
+            continue
+        if str(spec.get("type", "")).lower() not in SAFE_SPAWN_TYPES:
+            continue
+
+        safe_spec: dict[str, Any] = {}
+        for key in SAFE_SPAWN_ALLOWED_KEYS:
+            if key in spec:
+                safe_spec[key] = deepcopy(spec[key])
+
+        if not safe_spec.get("name"):
+            safe_spec["name"] = str(entity_id)
+
+        # Persist — spawned entities survive across turns
+        safe_spec.setdefault("lifecycle", {})
+        if isinstance(safe_spec["lifecycle"], dict):
+            safe_spec["lifecycle"]["category"] = "persistent"
+
+        safe_specs[f"dynamic_{entity_id}"] = safe_spec
+
+    return safe_specs
+
+
+def _resolve_dynamic_spawn_from_script(intent_kind: str, state: GameState) -> dict[str, dict[str, Any]]:
+    """Resolve spawn_entities from script-level dynamic_entity_templates, with fallback."""
+    templates = state.script.get("dynamic_entity_templates", {})
+    template = templates.get(intent_kind, FALLBACK_DYNAMIC_SPAWN)
+    entity_id = f"dynamic_{intent_kind}_{state.turn_id}"
+    return _sanitize_spawn_spec({entity_id: deepcopy(template)})
 
 
 def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
@@ -154,6 +213,29 @@ def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
                 "intent_kind": "improvised",
             }
         )
+
+    # discover — player searching / examining surroundings
+    discover_terms = ["有没有", "找找", "搜索", "搜查", "寻找", "翻找", "找找看", "看看有没有"]
+    if any(term in method for term in discover_terms) or ("检查" in method and "有没有" in method):
+        return _sanitize_assessment(
+            {
+                "plausibility": "reasonable",
+                "difficulty": "medium",
+                "risk": "low",
+                "intent_kind": "discover",
+            }
+        )
+
+    # create_environment — player constructing / rearranging surroundings
+    if any(term in method for term in ["设置", "制造", "布置", "堆", "堵", "挡住", "拦住"]):
+        return _sanitize_assessment(
+            {
+                "plausibility": "reasonable",
+                "difficulty": "medium",
+                "risk": "medium",
+                "intent_kind": "create_environment",
+            }
+            )
 
     if any(term in method for term in ["假装", "伪装", "巡逻", "投降", "骗", "冒充"]):
         intent_kind = "deception"
@@ -207,16 +289,26 @@ def _success_changes(
             "alert": False,
         }
     }
-    events = [f"{method}奏效了，{target_name}的注意力被短暂牵制。"]
+    events = [f"你的行动产生了效果。"]
 
     if intent_kind in {"deception", "social"}:
         entities[target_id]["hostile"] = False
-        flags["guard_distracted"] = True
-        events = [f"{target_name}暂时相信了你的说法，敌意明显松动。"]
+        flags["dynamic_distraction_created"] = True
+        events = [f"对方的态度明显松动。"]
     elif intent_kind == "stealth":
-        flags["guard_bypassed"] = True
+        flags["dynamic_path_opened"] = True
         entities[target_id]["line_of_sight_blocked"] = True
-        events = [f"{target_name}看丢了你的动向，门前出现了短暂空档。"]
+        events = [f"环境中出现了一个短暂的窗口。"]
+    elif intent_kind == "discover":
+        return {
+            "flags": flags,
+            "events": [f"你发现了一个新的可交互对象。"],
+        }
+    elif intent_kind == "create_environment":
+        return {
+            "flags": flags,
+            "events": [f"你改变了当前环境。"],
+        }
     elif intent_kind == "use":
         smoke_id = f"dynamic_smoke_{state.turn_id}"
         return {
@@ -255,9 +347,9 @@ def _success_changes(
             "events": events,
         }
         if strong_success:
-            changes["flags"]["guard_distracted"] = True
+            changes["flags"]["dynamic_distraction_created"] = True
         return changes
 
     if strong_success:
-        flags["guard_distracted"] = True
+        flags["dynamic_distraction_created"] = True
     return {"entities": entities, "flags": flags, "events": events}
