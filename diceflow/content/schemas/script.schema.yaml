@@ -121,7 +121,7 @@ properties:
       additionalProperties: false
       properties:
         when:
-          $ref: "#/$defs/when"
+          $ref: "#/$defs/runtime_generation_when"
         modifier:
           type: integer
   ending_texts:
@@ -133,6 +133,28 @@ properties:
     additionalProperties:
       type: object
       description: Keyed by intent_kind (discover, create_environment, etc.)
+  runtime_generation_hooks:
+    type: array
+    items:
+      type: object
+      required: [id, when, prompt_hint, allowed_entity_types]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        when:
+          $ref: "#/$defs/when"
+        prompt_hint:
+          type: string
+        allowed_entity_types:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        max_dc:
+          type: integer
+          minimum: 5
+          maximum: 30
   entities:
     type: object
     additionalProperties:
@@ -438,6 +460,17 @@ $defs:
           - type: array
             items:
               type: string
+  runtime_generation_when:
+    allOf:
+      - $ref: "#/$defs/when"
+      - type: object
+        properties:
+          result:
+            oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
   derivation_when:
     type: object
     additionalProperties: false

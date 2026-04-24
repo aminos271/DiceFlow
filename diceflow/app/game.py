@@ -14,6 +14,7 @@ from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.models import TurnRecord
 from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
+from diceflow.core.runtime_content import runtime_content_phase
 from diceflow.core.state import GameState
 from diceflow.core.updater import update_state
 from diceflow.core.validator import validate
@@ -39,9 +40,11 @@ class Game:
             check = self.adjudicator.resolve(assessment)
             changes = self.adjudicator.update_state(action, check, self.state)
             self.state.apply_changes(changes)
+            content_changes = runtime_content_phase(action, check, changes, self.state, self.llm)
+            self.state.apply_changes(content_changes)
             reaction_changes = reaction_phase(action, check, changes, self.state)
             self.state.apply_changes(reaction_changes)
-            turn_changes = merge_state_changes(changes, reaction_changes)
+            turn_changes = merge_state_changes(changes, content_changes, reaction_changes)
             narration = narrate(action, check, turn_changes, self.state, self.llm)
             summary = _make_summary(action, check, turn_changes)
             dynamic_validation = {
@@ -86,9 +89,11 @@ class Game:
         check = self.rules.resolve(action, self.state)
         changes = update_state(action, check, self.state)
         self.state.apply_changes(changes)
+        content_changes = runtime_content_phase(action, check, changes, self.state, self.llm)
+        self.state.apply_changes(content_changes)
         reaction_changes = reaction_phase(action, check, changes, self.state)
         self.state.apply_changes(reaction_changes)
-        turn_changes = merge_state_changes(changes, reaction_changes)
+        turn_changes = merge_state_changes(changes, content_changes, reaction_changes)
         narration = narrate(action, check, turn_changes, self.state, self.llm)
         summary = _make_summary(action, check, turn_changes)
 

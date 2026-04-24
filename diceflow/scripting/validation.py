@@ -14,6 +14,7 @@ VALID_CHANGE_KEYS = {
     "entities",
     "flags",
     "events",
+    "runtime_script_patch",
     "spawn_entities",
     "remove_entities",
     "reveal_entities",
@@ -24,9 +25,17 @@ VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
 VALID_DERIVATION_WHEN_KEYS = {"result", "intent_family", "target_id", "target_type", "target", "flags", "target_tags", "any_target_tags"}
 VALID_REACTION_WHEN_KEYS = VALID_WHEN_KEYS | {"result", "target_alive", "player_alive", "actor_tags", "any_actor_tags"}
+VALID_RUNTIME_GENERATION_WHEN_KEYS = VALID_WHEN_KEYS | {"result"}
 VALID_GENERIC_RULE_KEYS = {"id", "when", *VALID_ACTION_KEYS}
 VALID_DERIVATION_RULE_KEYS = {"id", "when", "spawn"}
 VALID_REACTION_RULE_KEYS = {"id", "actor", "when", "changes"}
+VALID_RUNTIME_GENERATION_HOOK_KEYS = {
+    "id",
+    "when",
+    "prompt_hint",
+    "allowed_entity_types",
+    "max_dc",
+}
 REQUIRED_TOP_LEVEL_KEYS = {
     "schema_version",
     "id",
@@ -62,6 +71,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "implied_entity_templates": dict,
     "implied_entity_rules": list,
     "dynamic_entity_templates": dict,
+    "runtime_generation_hooks": list,
 }
 
 
@@ -83,6 +93,8 @@ def validate_script(script: Script) -> None:
         _validate_derivation_rule(f"derivation_rules[{index}]", rule, errors)
     for index, rule in enumerate(script.get("reaction_rules", [])):
         _validate_reaction_rule(f"reaction_rules[{index}]", rule, errors)
+    for index, hook in enumerate(script.get("runtime_generation_hooks", [])):
+        _validate_runtime_generation_hook(f"runtime_generation_hooks[{index}]", hook, errors)
     for index, rule in enumerate(script.get("action_rules", [])):
         _validate_when_condition(f"action_rules[{index}]", rule.get("when", {}), errors)
     for index, modifier in enumerate(script.get("dc_modifiers", [])):
@@ -238,6 +250,29 @@ def _validate_reaction_rule(path: str, rule: dict[str, Any], errors: list[str]) 
     _validate_changes(f"{path}.changes", changes, errors, has_target=True)
 
 
+def _validate_runtime_generation_hook(path: str, hook: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(hook, dict):
+        errors.append(f"{path} must be a dict")
+        return
+    unknown_keys = sorted(set(hook) - VALID_RUNTIME_GENERATION_HOOK_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path} has unsupported hook field: {key}")
+    if not isinstance(hook.get("id"), str) or not hook.get("id"):
+        errors.append(f"{path}.id is required")
+    if "when" not in hook:
+        errors.append(f"{path}.when is required")
+    else:
+        _validate_runtime_generation_when_condition(path, hook["when"], errors)
+    if not isinstance(hook.get("prompt_hint"), str):
+        errors.append(f"{path}.prompt_hint must be a string")
+    allowed = hook.get("allowed_entity_types")
+    if not isinstance(allowed, list) or not allowed or not all(isinstance(item, str) for item in allowed):
+        errors.append(f"{path}.allowed_entity_types must be a non-empty string list")
+    max_dc = hook.get("max_dc", 15)
+    if not isinstance(max_dc, int) or max_dc < 5 or max_dc > 30:
+        errors.append(f"{path}.max_dc must be an int between 5 and 30")
+
+
 def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has_target: bool) -> None:
     if not isinstance(changes, dict):
         errors.append(f"{path} must be a dict")
@@ -304,5 +339,14 @@ def _validate_reaction_when_condition(path: str, when: dict[str, Any], errors: l
         errors.append(f"{path}.when must be a dict")
         return
     unknown_keys = sorted(set(when) - VALID_REACTION_WHEN_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path}.when has unsupported key: {key}")
+
+
+def _validate_runtime_generation_when_condition(path: str, when: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(when, dict):
+        errors.append(f"{path}.when must be a dict")
+        return
+    unknown_keys = sorted(set(when) - VALID_RUNTIME_GENERATION_WHEN_KEYS)
     for key in unknown_keys:
         errors.append(f"{path}.when has unsupported key: {key}")

@@ -38,6 +38,7 @@ class LLMClient:
         self.model = config.DEEPSEEK_MODEL_CHAT
         self.intent_prompt = (PROMPT_DIR / "intent_parser.txt").read_text(encoding="utf-8")
         self.narrator_prompt = (PROMPT_DIR / "narrator.txt").read_text(encoding="utf-8")
+        self.dynamic_content_prompt = (PROMPT_DIR / "dynamic_content_generator.txt").read_text(encoding="utf-8")
 
     def parse_intent(self, player_input: str, state: GameState) -> Action:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
@@ -91,6 +92,37 @@ class LLMClient:
                 {
                     "role": "user",
                     "content": f"当前状态：{state_summary}\n玩家行动：{action_summary}",
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
+    def generate_runtime_content(
+        self,
+        hook: dict[str, Any],
+        action: Action,
+        check: CheckResult,
+        state: GameState,
+    ) -> dict[str, Any]:
+        content = self._chat(
+            [
+                {"role": "system", "content": self.dynamic_content_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "scene": state.scene,
+                            "action": action,
+                            "check": check,
+                            "prompt_hint": hook.get("prompt_hint", ""),
+                            "allowed_entity_types": hook.get("allowed_entity_types", []),
+                            "max_dc": hook.get("max_dc", 15),
+                            "existing_entity_ids": list(state.entities),
+                            "state": _compact_state(state),
+                        },
+                        ensure_ascii=False,
+                    ),
                 },
             ],
             response_format={"type": "json_object"},
