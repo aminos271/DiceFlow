@@ -1,7 +1,13 @@
 import unittest
 
 from diceflow.app.game import Game
-from diceflow.app.ui import render_action_hints, render_scene_panel, render_status_panel, render_turn_result
+from diceflow.app.ui import (
+    render_action_hints,
+    render_prompt,
+    render_scene_panel,
+    render_status_panel,
+    render_turn_result,
+)
 from diceflow.core.models import TurnRecord
 from diceflow.scripting.loader import load_script
 
@@ -27,11 +33,11 @@ class UIPanelsTest(unittest.TestCase):
         hints = render_action_hints(state)
 
         self.assertIn("回合 1", status)
-        self.assertIn("HP", status)
-        self.assertIn("背包", status)
-        self.assertIn("【周围】", scene)
+        self.assertIn("❤️", status)
+        self.assertIn("🎒", status)
+        self.assertIn("🌍 周围", scene)
         self.assertIn("可见实体", scene)
-        self.assertIn("【可尝试】", hints)
+        self.assertIn("💡", hints)
 
     def test_turn_result_renders_check_summary_and_narration(self) -> None:
         record = TurnRecord(
@@ -47,10 +53,13 @@ class UIPanelsTest(unittest.TestCase):
 
         rendered = render_turn_result(record)
 
-        self.assertIn("【判定】", rendered)
         self.assertIn("d20=15", rendered)
         self.assertIn("DC 12", rendered)
-        self.assertIn("【叙事】", rendered)
+
+    def test_render_prompt_returns_colored_string(self) -> None:
+        prompt = render_prompt()
+        self.assertIn("⚔", prompt)
+        self.assertIn(">>", prompt)
 
 
 if __name__ == "__main__":

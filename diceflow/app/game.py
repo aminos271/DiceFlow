@@ -6,6 +6,7 @@ from typing import Any
 from diceflow.app.ui import (
     render_action_hints,
     render_debug,
+    render_prompt,
     render_scene_panel,
     render_status_panel,
     render_turn_result,
@@ -130,7 +131,7 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
         print(render_scene_panel(game.state))
         print(render_action_hints(game.state))
         try:
-            player_input = input(">> ").strip()
+            player_input = input(render_prompt()).strip()
         except EOFError:
             print("输入结束，游戏结束。")
             break
