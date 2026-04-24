@@ -110,7 +110,12 @@ class GameLoopTest(unittest.TestCase):
         self.assertFalse(game.state.entities["guard_1"]["hostile"])
         self.assertNotIn("guard_1", game.state.get_hostile_entities())
         self.assertIn("guard_1_corpse", game.state.entities)
-        self.assertIn("guard_1_corpse_shield", game.state.entities)
+        self.assertIn("guard_1_shield", game.state.entities)
+        self.assertIn("guard_1_shield", game.state.entities["guard_1_corpse"]["inventory"])
+        self.assertEqual(game.state.entities["guard_1_shield"]["source"], "guard_1")
+        self.assertEqual(game.state.entities["guard_1_shield"]["holder_id"], "guard_1_corpse")
+        self.assertTrue(game.state.entities["guard_1_shield"]["visible"])
+        self.assertTrue(game.state.entities["guard_1_shield"]["available"])
 
         loot_corpse = {
             "type": "take",
@@ -134,13 +139,13 @@ class GameLoopTest(unittest.TestCase):
             "tool": "",
         }
         self.assertTrue(validate(take_shield, game.state)["valid"])
-        self.assertEqual(take_shield["target_id"], "guard_1_corpse_shield")
+        self.assertEqual(take_shield["target_id"], "guard_1_shield")
 
         shield_changes = update_state(take_shield, {"result": "success"}, game.state)
         game.state.apply_changes(shield_changes)
 
         self.assertIn("\u76fe\u724c", game.state.player["inventory"])
-        self.assertTrue(game.state.entities["guard_1_corpse_shield"]["looted"])
+        self.assertTrue(game.state.entities["guard_1_shield"]["looted"])
 
 
 if __name__ == "__main__":

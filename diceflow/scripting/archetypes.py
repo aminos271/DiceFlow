@@ -102,6 +102,8 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
     "item": {
         **ENTITY_RUNTIME_DEFAULTS,
         "item_id": "$item_id",
+        "source": "",
+        "holder_id": "",
         "quantity": 1,
         "stackable": False,
         "weight": 1,

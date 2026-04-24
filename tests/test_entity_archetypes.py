@@ -39,6 +39,7 @@ class EntityArchetypesTest(unittest.TestCase):
                         "name": "银戒指",
                         "aliases": ["戒指"],
                         "item_id": "银戒指",
+                        "source": "merchant_1",
                         "value": 20,
                         "rarity": "uncommon",
                         "effects": [{"kind": "social_hint", "value": 1}],
@@ -48,6 +49,7 @@ class EntityArchetypesTest(unittest.TestCase):
         )
 
         ring = state.entities["silver_ring"]
+        self.assertEqual(ring["source"], "merchant_1")
         self.assertEqual(ring["value"], 20)
         self.assertEqual(ring["rarity"], "uncommon")
         self.assertEqual(ring["effects"], [{"kind": "social_hint", "value": 1}])

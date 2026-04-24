@@ -26,6 +26,7 @@ def derive_state_changes(
     _merge_changes(merged, derived_changes)
 
     merged = _expand_spawn_implied_entities(merged, state)
+    merged = _inherit_source_items_for_spawned_corpses(merged, state)
     return merged
 
 
@@ -109,6 +110,89 @@ def _expand_spawn_implied_entities(changes: StateChanges, state: Any) -> StateCh
     result = deepcopy(changes)
     result.setdefault("spawn_entities", {})
     result["spawn_entities"].update(additional)
+    return result
+
+
+def _inherit_source_items_for_spawned_corpses(changes: StateChanges, state: Any) -> StateChanges:
+    spawns = changes.get("spawn_entities", {})
+    if not isinstance(spawns, dict):
+        return changes
+
+    result = deepcopy(changes)
+    result.setdefault("set_entity_states", {})
+
+    for corpse_id, corpse in result.get("spawn_entities", {}).items():
+        if not isinstance(corpse, dict) or not _is_corpse(corpse):
+            continue
+        source_id = str(corpse.get("_source_entity_id") or corpse.get("source") or "")
+        if not source_id:
+            continue
+
+        inherited_item_ids = _source_item_ids(source_id, state)
+        if not inherited_item_ids:
+            continue
+
+        corpse["source"] = source_id
+        corpse["inventory"] = _dedupe([*list(corpse.get("inventory", [])), *inherited_item_ids])
+        for item_id in inherited_item_ids:
+            item_changes = result["set_entity_states"].setdefault(item_id, {})
+            item_changes.update(
+                {
+                    "visible": True,
+                    "available": True,
+                    "holder_id": str(corpse_id),
+                }
+            )
+
+    if not result.get("set_entity_states"):
+        result.pop("set_entity_states", None)
+    return result
+
+
+def _is_corpse(entity: dict[str, Any]) -> bool:
+    return entity.get("type") == "corpse" or "corpse" in entity.get("tags", [])
+
+
+def _source_item_ids(source_id: str, state: Any) -> list[str]:
+    source = state.entities.get(source_id, {})
+    item_ids: list[str] = []
+    item_ids.extend(_flatten_entity_refs(source.get("inventory", [])))
+    item_ids.extend(_flatten_entity_refs(source.get("equipped", {})))
+    for entity_id, entity in state.entities.items():
+        if str(entity.get("source") or "") == source_id and _is_item_like(entity):
+            item_ids.append(str(entity_id))
+    return _dedupe([item_id for item_id in item_ids if item_id in state.entities])
+
+
+def _flatten_entity_refs(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        refs: list[str] = []
+        for item in value:
+            refs.extend(_flatten_entity_refs(item))
+        return refs
+    if isinstance(value, dict):
+        refs: list[str] = []
+        for item in value.values():
+            refs.extend(_flatten_entity_refs(item))
+        return refs
+    return []
+
+
+def _is_item_like(entity: dict[str, Any]) -> bool:
+    tags = entity.get("tags", [])
+    return entity.get("type") in {"item", "pickup"} or "item" in tags or "equipment" in tags
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
     return result
 
 
