@@ -40,6 +40,91 @@ dc_modifiers:
     target:
       hostile: false
   modifier: -2
+implied_entity_templates:
+  shield:
+    id_template: $source_id_shield
+    entity:
+      name: 盾牌
+      aliases:
+      - 盾牌
+      - 守卫的盾牌
+      - 破损盾牌
+      - $source_name旁的盾牌
+      type: pickup
+      item_id: 盾牌
+      tags:
+      - item
+      - equipment
+      - shield
+      - derived
+      hooks:
+        take_critical_success_events:
+        - 你取下守卫的盾牌，虽然边缘破损，但仍能派上用场。
+        take_success_events:
+        - 你拿起守卫的盾牌，收进可用装备里。
+        take_fail_events:
+        - 盾牌卡在尸体下面，你需要再调整一下角度。
+        inspect_success_events:
+        - 这面盾牌有明显裂痕，但还能挡住一次正面冲击。
+derivation_rules:
+- id: fallen_enemy_leaves_corpse
+  when:
+    result:
+    - success
+    - critical_success
+    target_tags:
+    - enemy
+    target:
+      alive: false
+  spawn:
+    id_template: $target_id_corpse
+    entity:
+      name: $target_name的尸体
+      aliases:
+      - 尸体
+      - $target_name尸体
+      - $target_name的尸体
+      type: corpse
+      tags:
+      - corpse
+      - searchable
+      - derived
+      implied_equipment:
+      - shield
+      metadata:
+        allowed_actions:
+        - inspect
+        - take
+        actions:
+          inspect:
+            dc: 5
+            outcomes:
+              success:
+                events:
+                - 你检查了$target_name，确认他已经失去威胁。
+          take:
+            dc: 8
+            outcomes:
+              critical_success:
+                entities:
+                  $target:
+                    looted: true
+                events:
+                - 你仔细搜过尸体，只找到破损的护具和无用杂物，没有钥匙。
+              success:
+                entities:
+                  $target:
+                    looted: true
+                events:
+                - 你搜刮了尸体，没有找到钥匙或可用物品。
+              fail:
+                events:
+                - 你匆忙翻找尸体，没有找到有价值的东西。
+              critical_fail:
+                player:
+                  hp_delta: -1
+                events:
+                - 你翻动尸体时被破裂甲片划伤，没有找到钥匙。
 ending_texts:
   victory: 守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。
   death: 你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。
@@ -318,6 +403,23 @@ scene_actions:
           hp_delta: -2
         events:
         - 迟疑让守卫完全抢占先机，你被重重逼退。
+reaction_rules:
+- id: hostile_target_counterattack
+  actor: target
+  when:
+    intent_family: attack
+    result:
+    - success
+    - fail
+    target_alive: true
+    target_tags:
+    - enemy
+    - hostile
+  changes:
+    player:
+      hp_delta: -2
+    events:
+    - $actor_name怒吼着扑向你，你受到2点伤害。
 ending_conditions:
 - ending: death
   when:

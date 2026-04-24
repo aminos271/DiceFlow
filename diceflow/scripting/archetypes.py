@@ -13,6 +13,154 @@ ENTITY_RUNTIME_DEFAULTS = {
     "looted": False,
 }
 ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
+    "npc": {
+        **ENTITY_RUNTIME_DEFAULTS,
+        "hp": 6,
+        "max_hp": 6,
+        "alive": True,
+        "hostile": False,
+        "faction": "neutral",
+        "role": "npc",
+        "location": "",
+        "favorability": 0,
+        "disposition": "neutral",
+        "inventory": [],
+        "equipped": {},
+        "attributes": {
+            "strength": 10,
+            "agility": 10,
+            "endurance": 10,
+            "intellect": 10,
+            "will": 10,
+            "charm": 10,
+        },
+        "goals": [],
+        "memory": [],
+        "tags": ["npc"],
+        "hooks": {
+            "attack_success_events": ["你击中了$target_name。"],
+            "attack_fail_events": ["$target_name避开了攻击。"],
+            "talk_success_events": ["$target_name愿意继续听你说。"],
+            "talk_fail_events": ["$target_name对你的态度没有改善。"],
+            "inspect_success_events": ["你观察了$target_name，判断出对方的态度和状态。"],
+        },
+        "metadata": {
+            "allowed_actions": ["talk", "inspect", "attack"],
+            "actions": {
+                "talk": {
+                    "dc": 10,
+                    "outcomes": {
+                        "critical_success": {
+                            "entities": {"$target": {"favorability_delta": 2, "hostile": False}},
+                            "events": "$hook.talk_success_events",
+                        },
+                        "success": {
+                            "entities": {"$target": {"favorability_delta": 1}},
+                            "events": "$hook.talk_success_events",
+                        },
+                        "fail": {
+                            "events": "$hook.talk_fail_events",
+                        },
+                        "critical_fail": {
+                            "entities": {"$target": {"favorability_delta": -2, "hostile": True}},
+                            "events": "$hook.talk_fail_events",
+                        },
+                    },
+                },
+                "inspect": {
+                    "dc": 8,
+                    "outcomes": {
+                        "success": {
+                            "events": "$hook.inspect_success_events",
+                        }
+                    },
+                },
+                "attack": {
+                    "dc": 12,
+                    "outcomes": {
+                        "critical_success": {
+                            "entities": {"$target": {"hp_delta": -5, "hostile": True}},
+                            "events": "$hook.attack_success_events",
+                        },
+                        "success": {
+                            "entities": {"$target": {"hp_delta": -3, "hostile": True}},
+                            "events": "$hook.attack_success_events",
+                        },
+                        "fail": {
+                            "events": "$hook.attack_fail_events",
+                        },
+                        "critical_fail": {
+                            "player": {"hp_delta": -1},
+                            "entities": {"$target": {"hostile": True}},
+                            "events": "$hook.attack_fail_events",
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "item": {
+        **ENTITY_RUNTIME_DEFAULTS,
+        "item_id": "$item_id",
+        "quantity": 1,
+        "stackable": False,
+        "weight": 1,
+        "value": 0,
+        "rarity": "common",
+        "durability": None,
+        "properties": {},
+        "effects": [],
+        "tags": ["item"],
+        "hooks": {
+            "take_flags": {},
+            "take_critical_success_events": ["你立刻拿起$target_name并收好。"],
+            "take_success_events": ["你拿起$target_name并收好。"],
+            "take_fail_events": ["$target_name暂时卡住了，你需要再试一次。"],
+            "inspect_success_events": ["你检查了$target_name。"],
+        },
+        "metadata": {
+            "allowed_actions": ["take", "inspect", "use"],
+            "actions": {
+                "take": {
+                    "dc": 5,
+                    "outcomes": {
+                        "critical_success": {
+                            "move_item_to_inventory": ["$target"],
+                            "flags": "$hook.take_flags",
+                            "events": "$hook.take_critical_success_events",
+                        },
+                        "success": {
+                            "move_item_to_inventory": ["$target"],
+                            "flags": "$hook.take_flags",
+                            "events": "$hook.take_success_events",
+                        },
+                        "fail": {
+                            "events": "$hook.take_fail_events",
+                        },
+                    },
+                },
+                "inspect": {
+                    "dc": 5,
+                    "outcomes": {
+                        "success": {
+                            "events": "$hook.inspect_success_events",
+                        }
+                    },
+                },
+                "use": {
+                    "dc": 10,
+                    "outcomes": {
+                        "success": {
+                            "events": ["你使用了$target_name。"],
+                        },
+                        "fail": {
+                            "events": ["$target_name没有产生明确效果。"],
+                        },
+                    },
+                },
+            },
+        },
+    },
     "container": {
         **ENTITY_RUNTIME_DEFAULTS,
         "contents": [],

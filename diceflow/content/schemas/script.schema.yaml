@@ -65,6 +65,10 @@ properties:
     type: array
     items:
       $ref: "#/$defs/derivation_rule"
+  reaction_rules:
+    type: array
+    items:
+      $ref: "#/$defs/reaction_rule"
   implied_entity_templates:
     type: object
     additionalProperties:
@@ -276,6 +280,23 @@ $defs:
             type: string
           entity:
             $ref: "#/$defs/entity"
+  reaction_rule:
+    type: object
+    required: [when, changes]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+      actor:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      when:
+        $ref: "#/$defs/reaction_when"
+      changes:
+        $ref: "#/$defs/state_changes"
   when:
     type: object
     additionalProperties: false
@@ -328,6 +349,85 @@ $defs:
             items:
               type: string
       any_tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+  reaction_when:
+    type: object
+    additionalProperties: false
+    properties:
+      intent_family:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_id:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_type:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target:
+        type: object
+        additionalProperties: true
+      flags:
+        type: object
+        additionalProperties: true
+      entities:
+        type: object
+        additionalProperties:
+          type: object
+          additionalProperties: true
+      target_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_target_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_tool_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      result:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      target_alive:
+        type: boolean
+      player_alive:
+        type: boolean
+      actor_tags:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      any_actor_tags:
         oneOf:
           - type: string
           - type: array

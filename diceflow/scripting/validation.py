@@ -23,8 +23,10 @@ VALID_CHANGE_KEYS = {
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
 VALID_DERIVATION_WHEN_KEYS = {"result", "intent_family", "target_id", "target_type", "target", "flags", "target_tags", "any_target_tags"}
+VALID_REACTION_WHEN_KEYS = VALID_WHEN_KEYS | {"result", "target_alive", "player_alive", "actor_tags", "any_actor_tags"}
 VALID_GENERIC_RULE_KEYS = {"id", "when", *VALID_ACTION_KEYS}
 VALID_DERIVATION_RULE_KEYS = {"id", "when", "spawn"}
+VALID_REACTION_RULE_KEYS = {"id", "actor", "when", "changes"}
 REQUIRED_TOP_LEVEL_KEYS = {
     "schema_version",
     "id",
@@ -56,6 +58,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "ending_texts": dict,
     "default_no_outcome_event": str,
     "derivation_rules": list,
+    "reaction_rules": list,
     "implied_entity_templates": dict,
     "implied_entity_rules": list,
 }
@@ -77,6 +80,8 @@ def validate_script(script: Script) -> None:
         _validate_generic_rule(f"generic_rules[{index}]", rule, errors)
     for index, rule in enumerate(script.get("derivation_rules", [])):
         _validate_derivation_rule(f"derivation_rules[{index}]", rule, errors)
+    for index, rule in enumerate(script.get("reaction_rules", [])):
+        _validate_reaction_rule(f"reaction_rules[{index}]", rule, errors)
     for index, rule in enumerate(script.get("action_rules", [])):
         _validate_when_condition(f"action_rules[{index}]", rule.get("when", {}), errors)
     for index, modifier in enumerate(script.get("dc_modifiers", [])):
@@ -211,6 +216,27 @@ def _validate_derivation_rule(path: str, rule: dict[str, Any], errors: list[str]
         errors.append(f"{path}.spawn.entity must be a dict")
 
 
+def _validate_reaction_rule(path: str, rule: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(rule, dict):
+        errors.append(f"{path} must be a dict")
+        return
+    unknown_keys = sorted(set(rule) - VALID_REACTION_RULE_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path} has unsupported reaction field: {key}")
+    if "when" not in rule:
+        errors.append(f"{path}.when is required")
+    else:
+        _validate_reaction_when_condition(path, rule["when"], errors)
+    actor = rule.get("actor", "target")
+    if not isinstance(actor, (str, list)):
+        errors.append(f"{path}.actor must be a string or list")
+    changes = rule.get("changes")
+    if not isinstance(changes, dict):
+        errors.append(f"{path}.changes must be a dict")
+        return
+    _validate_changes(f"{path}.changes", changes, errors, has_target=True)
+
+
 def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has_target: bool) -> None:
     if not isinstance(changes, dict):
         errors.append(f"{path} must be a dict")
@@ -268,5 +294,14 @@ def _validate_derivation_when_condition(path: str, when: dict[str, Any], errors:
         errors.append(f"{path}.when must be a dict")
         return
     unknown_keys = sorted(set(when) - VALID_DERIVATION_WHEN_KEYS)
+    for key in unknown_keys:
+        errors.append(f"{path}.when has unsupported key: {key}")
+
+
+def _validate_reaction_when_condition(path: str, when: dict[str, Any], errors: list[str]) -> None:
+    if not isinstance(when, dict):
+        errors.append(f"{path}.when must be a dict")
+        return
+    unknown_keys = sorted(set(when) - VALID_REACTION_WHEN_KEYS)
     for key in unknown_keys:
         errors.append(f"{path}.when has unsupported key: {key}")

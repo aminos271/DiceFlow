@@ -184,6 +184,23 @@ scene_actions:
           hp_delta: -2
         events:
         - 你判断失误，骷髅抢先压上来重击了你。
+reaction_rules:
+- id: hostile_target_counterattack
+  actor: target
+  when:
+    intent_family: attack
+    result:
+    - success
+    - fail
+    target_alive: true
+    target_tags:
+    - enemy
+    - hostile
+  changes:
+    player:
+      hp_delta: -1
+    events:
+    - $actor_name趁势反扑，你受到1点伤害。
 ending_conditions:
 - ending: death
   when:

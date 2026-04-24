@@ -87,6 +87,61 @@ class GameLoopTest(unittest.TestCase):
 
         self.assertTrue(changes["flags"]["door_open"])
 
+    def test_reaction_phase_runs_after_successful_attack(self) -> None:
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.rules = RuleEngine(random.Random(0))
+
+        record = game.run_turn("\u653b\u51fb\u5b88\u536b")
+
+        self.assertEqual(record.check["result"], "success")
+        self.assertEqual(record.state_changes["entities"]["guard_1"]["hp_delta"], -3)
+        self.assertEqual(record.state_changes["player"]["hp_delta"], -2)
+        self.assertEqual(game.state.player["hp"], 8)
+
+    def test_dead_guard_spawns_searchable_corpse(self) -> None:
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.rules = RuleEngine(random.Random(0))
+
+        game.run_turn("\u653b\u51fb\u5b88\u536b")
+        game.run_turn("\u653b\u51fb\u5b88\u536b")
+
+        self.assertFalse(game.state.entities["guard_1"]["alive"])
+        self.assertFalse(game.state.entities["guard_1"]["available"])
+        self.assertFalse(game.state.entities["guard_1"]["hostile"])
+        self.assertNotIn("guard_1", game.state.get_hostile_entities())
+        self.assertIn("guard_1_corpse", game.state.entities)
+        self.assertIn("guard_1_corpse_shield", game.state.entities)
+
+        loot_corpse = {
+            "type": "take",
+            "target": "\u5b88\u536b\u7684\u5c38\u4f53",
+            "method": "\u641c\u522e\u5b88\u536b\u7684\u5c38\u4f53\uff0c\u5c1d\u8bd5\u627e\u94a5\u5319",
+            "tool": "",
+        }
+        self.assertTrue(validate(loot_corpse, game.state)["valid"])
+        self.assertEqual(loot_corpse["target_id"], "guard_1_corpse")
+
+        changes = update_state(loot_corpse, {"result": "success"}, game.state)
+        game.state.apply_changes(changes)
+
+        self.assertTrue(game.state.entities["guard_1_corpse"]["looted"])
+        self.assertNotIn("\u94a5\u5319", game.state.player["inventory"])
+
+        take_shield = {
+            "type": "take",
+            "target": "\u5b88\u536b\u7684\u76fe\u724c",
+            "method": "\u62ff\u8d77\u5b88\u536b\u7684\u76fe\u724c",
+            "tool": "",
+        }
+        self.assertTrue(validate(take_shield, game.state)["valid"])
+        self.assertEqual(take_shield["target_id"], "guard_1_corpse_shield")
+
+        shield_changes = update_state(take_shield, {"result": "success"}, game.state)
+        game.state.apply_changes(shield_changes)
+
+        self.assertIn("\u76fe\u724c", game.state.player["inventory"])
+        self.assertTrue(game.state.entities["guard_1_corpse_shield"]["looted"])
+
 
 if __name__ == "__main__":
     unittest.main()

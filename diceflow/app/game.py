@@ -10,7 +10,9 @@ from diceflow.app.ui import (
     render_status_panel,
     render_turn_result,
 )
+from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.models import TurnRecord
+from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
 from diceflow.core.state import GameState
 from diceflow.core.updater import update_state
@@ -24,12 +26,41 @@ class Game:
         self.script = script
         self.state = GameState(self.script)
         self.rules = RuleEngine()
+        self.adjudicator = DynamicAdjudicator()
         self.llm = self._build_llm() if use_llm else None
 
     def run_turn(self, player_input: str) -> TurnRecord:
         turn_id = self.state.advance_turn()
         action = parse_intent(player_input, self.state, self.llm)
         validation = validate(action, self.state)
+
+        if self.adjudicator.can_adjudicate(action, validation, self.state):
+            assessment = self.adjudicator.assess(action, self.state, self.llm)
+            check = self.adjudicator.resolve(assessment)
+            changes = self.adjudicator.update_state(action, check, self.state)
+            self.state.apply_changes(changes)
+            reaction_changes = reaction_phase(action, check, changes, self.state)
+            self.state.apply_changes(reaction_changes)
+            turn_changes = merge_state_changes(changes, reaction_changes)
+            narration = narrate(action, check, turn_changes, self.state, self.llm)
+            summary = _make_summary(action, check, turn_changes)
+            dynamic_validation = {
+                "valid": True,
+                "reason": "dynamic_adjudication",
+                "fallback_reason": validation.get("reason", ""),
+            }
+            record = TurnRecord(
+                turn_id=turn_id,
+                player_input=player_input,
+                action=action,
+                validation=dynamic_validation,
+                check=check,
+                state_changes=turn_changes,
+                narration=narration,
+                summary=summary,
+            )
+            self.state.record_turn(record.to_dict())
+            return record
 
         if not validation["valid"]:
             changes = {
@@ -55,8 +86,11 @@ class Game:
         check = self.rules.resolve(action, self.state)
         changes = update_state(action, check, self.state)
         self.state.apply_changes(changes)
-        narration = narrate(action, check, changes, self.state, self.llm)
-        summary = _make_summary(action, check, changes)
+        reaction_changes = reaction_phase(action, check, changes, self.state)
+        self.state.apply_changes(reaction_changes)
+        turn_changes = merge_state_changes(changes, reaction_changes)
+        narration = narrate(action, check, turn_changes, self.state, self.llm)
+        summary = _make_summary(action, check, turn_changes)
 
         record = TurnRecord(
             turn_id=turn_id,
@@ -64,7 +98,7 @@ class Game:
             action=action,
             validation=validation,
             check=check,
-            state_changes=changes,
+            state_changes=turn_changes,
             narration=narration,
             summary=summary,
         )
@@ -113,6 +147,12 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
 
 def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[str, Any]) -> str:
     action_type = action.get("intent_family", "unknown")
+    if check.get("dynamic"):
+        assessment = check.get("assessment", {})
+        intent_kind = "improvised"
+        if isinstance(assessment, dict):
+            intent_kind = str(assessment.get("intent_kind") or intent_kind)
+        action_type = f"dynamic:{intent_kind}"
     target = action.get("target") or action.get("target_id") or "当前局势"
     result = check.get("result", "unknown")
     event = "；".join(changes.get("events", []))

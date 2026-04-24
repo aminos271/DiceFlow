@@ -152,6 +152,8 @@ class GameState:
                 entity["hp"] = max(0, min(entity["hp"], entity.get("max_hp", entity["hp"])))
                 if entity["hp"] <= 0:
                     entity["alive"] = False
+                    entity["available"] = False
+                    entity["hostile"] = False
             self._sync_lifecycle_phase(entity)
 
         for entity_id, entity_changes in changes.get("set_entity_states", {}).items():

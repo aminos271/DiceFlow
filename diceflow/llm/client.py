@@ -73,6 +73,29 @@ class LLMClient:
             ],
         ).strip()
 
+    def evaluate_dynamic_action(self, action: Action, state: GameState) -> dict[str, Any]:
+        state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
+        action_summary = json.dumps(action, ensure_ascii=False)
+        content = self._chat(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是 TRPG 动态裁定助手，只做定性评估，不决定数值结果。"
+                        "只输出 JSON：plausibility, difficulty, risk, intent_kind。"
+                        "difficulty 只能是 easy、medium、hard、impossible。"
+                        "禁止让玩家直接通关、秒杀 Boss、无成本获得神器、修改主线设定或跳过核心挑战。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"当前状态：{state_summary}\n玩家行动：{action_summary}",
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
     def _chat(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
