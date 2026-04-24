@@ -1,11 +1,14 @@
 import random
 import unittest
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 from diceflow.app.game import Game
 from diceflow.core.adjudicator import DynamicAdjudicator
+from diceflow.core.models import CheckResult
 from diceflow.core.rules import RuleEngine
 from diceflow.scripting.loader import load_script
+from diceflow.scripting.resolver import resolve_action_spec
 
 
 class DynamicAdjudicatorTest(unittest.TestCase):
@@ -78,6 +81,9 @@ class DynamicAdjudicatorTest(unittest.TestCase):
         self.assertEqual(record.check["assessment"]["intent_kind"], "discover")
         self.assertEqual(record.check["result"], "success")
         self.assertIn("spawn_entities", record.state_changes)
+        self.assertIn("runtime_script_patch", record.state_changes)
+        self.assertEqual(len(game.state.script_patches), 1)
+        self.assertEqual(game.state.script_patches[0]["ops"][0]["op"], "add_entity")
 
         spawned_id: str | None = None
         for eid, entity in game.state.entities.items():
@@ -89,6 +95,7 @@ class DynamicAdjudicatorTest(unittest.TestCase):
         self.assertEqual(game.state.entities[spawned_id]["type"], "container")
         self.assertTrue(game.state.entities[spawned_id]["visible"])
         self.assertTrue(game.state.entities[spawned_id]["available"])
+        self.assertIn(spawned_id, game.state.script["entities"])
 
         # Turn 2 — open the discovered compartment
         open_action = {
@@ -108,8 +115,131 @@ class DynamicAdjudicatorTest(unittest.TestCase):
             record2 = game.run_turn("打开暗格")
 
         self.assertEqual(record2.action["intent_family"], "open")
+        self.assertNotEqual(record2.validation["reason"], "dynamic_adjudication")
+        self.assertFalse(record2.check.get("dynamic", False))
+        self.assertEqual(resolve_action_spec(open_action, game.state)["scope"], "entity")
         self.assertEqual(record2.check["result"], "success")
         self.assertTrue(game.state.entities[spawned_id].get("opened"))
+
+
+    def test_discover_override_overrules_llm_improvised(self) -> None:
+        """LLM returning improvised for a search action should be overridden to discover."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        # Mock LLM that would misclassify search as improvised
+        mock_llm = MagicMock()
+        mock_llm.evaluate_dynamic_action.return_value = {
+            "plausibility": "reasonable",
+            "difficulty": "medium",
+            "risk": "medium",
+            "intent_kind": "improvised",
+        }
+        game.llm = mock_llm
+
+        action = {
+            "intent_family": "unknown",
+            "type": "unknown",
+            "target": "",
+            "target_id": "",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "我搜索墙上有没有暗格",
+            "method": "我搜索墙上有没有暗格",
+        }
+
+        with patch("diceflow.app.game.parse_intent", return_value=action):
+            record = game.run_turn("我搜索墙上有没有暗格")
+
+        self.assertEqual(record.check["assessment"]["intent_kind"], "discover")
+        self.assertIn("spawn_entities", record.state_changes)
+
+    def test_discover_no_empty_target_id_in_entities(self) -> None:
+        """Discover with no target should not produce entities['']."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        action = {
+            "intent_family": "unknown",
+            "type": "unknown",
+            "target": "",
+            "target_id": "",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "搜索周围有没有线索",
+            "method": "搜索周围有没有线索",
+        }
+
+        with patch("diceflow.app.game.parse_intent", return_value=action):
+            record = game.run_turn("搜索周围有没有线索")
+
+        state_changes = record.state_changes
+        entities_key = state_changes.get("entities", {})
+        self.assertNotIn("", entities_key,
+                         "Should not write to entities[''] when target_id is empty")
+
+    def test_discover_failure_no_hp_damage(self) -> None:
+        """Discover failure should not deduct HP or use combat fail template directly."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        adj = DynamicAdjudicator(random.Random(0))
+
+        action: dict[str, Any] = {
+            "intent_family": "unknown",
+            "type": "unknown",
+            "target": "",
+            "target_id": "",
+            "tool": "",
+            "tool_id": "",
+            "approach_tags": [],
+            "method_text": "搜索周围有没有线索",
+            "method": "搜索周围有没有线索",
+        }
+
+        for result, expected_substring in [
+            ("fail", "没有找到明确线索"),
+            ("critical_fail", "弄出了声响"),
+        ]:
+            check: CheckResult = {
+                "dc": 13,
+                "roll": 5,
+                "result": result,
+                "dynamic": True,
+                "assessment": {
+                    "intent_kind": "discover",
+                    "risk": "low",
+                    "difficulty": "medium",
+                    "plausibility": "reasonable",
+                },
+            }
+            changes = adj.update_state(action, check, game.state)
+            self.assertNotIn(
+                "player", changes,
+                f"Discover {result} should not deduct HP",
+            )
+            events = " ".join(changes.get("events", []))
+            self.assertIn(
+                expected_substring, events,
+                f"Discover {result} events should contain '{expected_substring}', got: {events}",
+            )
+            self.assertFalse(
+                any(word in events for word in ("反制", "识破")),
+                f"Discover {result} should not use combat fail template, got: {events}",
+            )
+
+    def test_discover_success_spawns_dynamic_entity_from_keywords(self) -> None:
+        """Different discover keywords should all spawn a dynamic entity on success."""
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        for input_text in ("找找周围有没有线索", "查看可疑痕迹", "检查脚印"):
+            record = game.run_turn(input_text)
+            if record.check["result"] in ("success", "critical_success"):
+                self.assertIn(
+                    "spawn_entities", record.state_changes,
+                    f"'{input_text}' success should spawn entities",
+                )
 
 
 if __name__ == "__main__":

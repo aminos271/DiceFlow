@@ -11,11 +11,14 @@ from diceflow.core.lifecycle import (
     prepare_spawned_entity,
 )
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
+from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
 
 
 class GameState:
     def __init__(self, script: Script) -> None:
+        self.base_script = deepcopy(script)
         self.script = deepcopy(script)
+        self.script_patches: list[RuntimeScriptPatch] = []
         self.turn_id = 0
         self.player: dict[str, Any] = deepcopy(self.script["player"])
         self.scene: dict[str, Any] = deepcopy(self.script["scene"])
@@ -28,6 +31,35 @@ class GameState:
         self.history: list[dict[str, Any]] = []
         self.entity_journal: list[dict[str, Any]] = []
 
+    def apply_script_patch(self, patch: RuntimeScriptPatch | None) -> None:
+        if not patch:
+            return
+
+        normalized = normalize_runtime_script_patch(patch)
+        existing_entity_ids = set(self.script.get("entities", {})) | set(self.entities)
+        for op in normalized["ops"]:
+            if op["op"] == "add_entity" and op["id"] in existing_entity_ids:
+                raise ValueError(f"runtime script patch cannot overwrite existing entity id: {op['id']}")
+
+        next_script = apply_runtime_script_patch(self.script, normalized)
+        added_entities: dict[str, dict[str, Any]] = {}
+        for op in normalized["ops"]:
+            if op["op"] == "add_entity":
+                entity_id = op["id"]
+                added_entities[entity_id] = next_script["entities"][entity_id]
+
+        self.script = next_script
+        self.script_patches.append(deepcopy(normalized))
+        for op in normalized["ops"]:
+            if op["op"] == "set_flag":
+                self.flags[op["key"]] = op["value"]
+        for entity_id, entity in added_entities.items():
+            self.entities[entity_id] = initialize_entity(
+                self._with_runtime_defaults(deepcopy(entity)),
+                entity_id,
+                self.turn_id,
+            )
+
     def get_snapshot(self) -> dict[str, Any]:
         return {
             "turn_id": self.turn_id,
@@ -37,6 +69,7 @@ class GameState:
             "flags": deepcopy(self.flags),
             "recent_events": list(self.recent_events[-5:]),
             "entity_journal": deepcopy(self.entity_journal[-10:]),
+            "script_patches": deepcopy(self.script_patches[-10:]),
         }
 
     def get_visible_entities(self) -> dict[str, dict[str, Any]]:
@@ -112,6 +145,7 @@ class GameState:
     def apply_changes(self, changes: dict[str, Any]) -> None:
         if not changes:
             return
+        self.apply_script_patch(changes.get("runtime_script_patch"))
 
         player_changes = changes.get("player", {})
         self._apply_object_changes(self.player, player_changes)

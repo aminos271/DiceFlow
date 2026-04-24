@@ -29,6 +29,25 @@ SAFE_SPAWN_ALLOWED_KEYS = frozenset({"name", "aliases", "type", "tags", "content
 # Minimal fallback for dynamic entity spawning when no script template exists.
 FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
 
+# Keywords that force intent_kind to "discover", overriding LLM misclassification.
+DISCOVER_KEYWORDS = frozenset({"有没有", "找找", "搜索", "搜查", "寻找", "翻找", "找找看", "看看有没有", "可疑", "线索", "脚印", "暗格"})
+
+
+def _apply_discover_override(action: Action, assessment: dict[str, Any]) -> None:
+    """Force intent_kind=discover when method text contains discover keywords.
+    This catches LLM misclassification (e.g. LLM returns improvised for search actions).
+    Modifies the assessment dict in-place.
+    """
+    method = str(action.get("method_text") or action.get("method") or "").lower()
+    if any(term in method for term in DISCOVER_KEYWORDS):
+        assessment["intent_kind"] = "discover"
+        # Discover is a peaceful search — never hostile-grade risk
+        if assessment.get("risk") not in ("low", "medium"):
+            assessment["risk"] = "low"
+        # Override impossible difficulty — searching is never impossible
+        if assessment.get("difficulty") == "impossible":
+            assessment["difficulty"] = "medium"
+
 
 class DynamicAdjudicator:
     """Fallback adjudication for plausible actions not covered by script rules."""
@@ -48,7 +67,9 @@ class DynamicAdjudicator:
         if llm and hasattr(llm, "evaluate_dynamic_action"):
             for _ in range(2):
                 try:
-                    return _sanitize_assessment(llm.evaluate_dynamic_action(action, state))
+                    assessment = _sanitize_assessment(llm.evaluate_dynamic_action(action, state))
+                    _apply_discover_override(action, assessment)
+                    return assessment
                 except Exception:
                     pass
         return _heuristic_assessment(action, state)
@@ -106,16 +127,32 @@ class DynamicAdjudicator:
             if isinstance(spawn, dict) and spawn:
                 spawn_changes = changes.setdefault("spawn_entities", {})
                 spawn_changes.update(deepcopy(spawn))
+                changes["runtime_script_patch"] = _runtime_patch_for_spawn(spawn_changes, state)
             elif intent_kind in {"discover", "create_environment"}:
                 spawn = _resolve_dynamic_spawn_from_script(intent_kind, state)
                 if spawn:
                     changes["spawn_entities"] = spawn
+                    changes["runtime_script_patch"] = _runtime_patch_for_spawn(spawn, state)
             return changes
+
+        # Discover failure — no HP cost, different narrative
+        if intent_kind == "discover":
+            discover_fail: StateChanges = {"flags": {"dynamic_adjudication_used": True}}
+            if result == "critical_fail":
+                discover_fail["flags"]["heightened_alert"] = True
+                discover_fail["events"] = ["你弄出了声响，可能引起了注意。"]
+            else:
+                discover_fail["events"] = ["你没有找到明确线索，但对周围环境有了更多了解。"]
+            return discover_fail
+
+        entity_changes: dict[str, dict[str, Any]] = {}
+        if target_id and target_id in state.entities:
+            entity_changes[target_id] = {"alert": True}
 
         hp_loss = 2 if result == "critical_fail" or risk == "high" else 1
         return {
             "player": {"hp_delta": -hp_loss},
-            "entities": {target_id: {"alert": True}},
+            "entities": entity_changes,
             "events": [f"{method}没有奏效，{target_name}识破了你的意图并逼近反制。"],
         }
 
@@ -197,6 +234,22 @@ def _resolve_dynamic_spawn_from_script(intent_kind: str, state: GameState) -> di
     return _sanitize_spawn_spec({entity_id: deepcopy(template)})
 
 
+def _runtime_patch_for_spawn(spawn: dict[str, dict[str, Any]], state: GameState) -> dict[str, Any]:
+    return {
+        "id": f"dynamic_spawn_turn_{state.turn_id}",
+        "source": "dynamic_adjudicator",
+        "turn_id": state.turn_id,
+        "ops": [
+            {
+                "op": "add_entity",
+                "id": str(entity_id),
+                "entity": deepcopy(entity),
+            }
+            for entity_id, entity in spawn.items()
+        ],
+    }
+
+
 def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
     method = str(action.get("method_text") or action.get("method") or "").lower()
     family = action_family(action)
@@ -215,8 +268,7 @@ def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
         )
 
     # discover — player searching / examining surroundings
-    discover_terms = ["有没有", "找找", "搜索", "搜查", "寻找", "翻找", "找找看", "看看有没有"]
-    if any(term in method for term in discover_terms) or ("检查" in method and "有没有" in method):
+    if any(term in method for term in DISCOVER_KEYWORDS) or ("检查" in method and "有没有" in method):
         return _sanitize_assessment(
             {
                 "plausibility": "reasonable",
@@ -283,12 +335,9 @@ def _success_changes(
 ) -> StateChanges:
     strong_success = result == "critical_success"
     flags = {"dynamic_adjudication_used": True}
-    entities: dict[str, dict[str, Any]] = {
-        target_id: {
-            "distracted": True,
-            "alert": False,
-        }
-    }
+    entities: dict[str, dict[str, Any]] = {}
+    if target_id and target_id in state.entities:
+        entities[target_id] = {"distracted": True, "alert": False}
     events = [f"你的行动产生了效果。"]
 
     if intent_kind in {"deception", "social"}:
