@@ -3,11 +3,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.core.implied_entity import (
+    _implied_kind,
+    _render_implied_entity,
+    _resolve_implied_template,
+)
 from diceflow.core.intent import action_family
+from diceflow.core.matching import matches_all_tags, matches_any_tag, matches_object, matches_value
 from diceflow.core.models import Action, CheckResult, StateChanges
-
-
-PRONOUN_POSSESSIVES = ("他的", "她的", "它的", "其")
+from diceflow.core.utils import dedupe_preserving_order, traverse_replace
 
 
 def derive_state_changes(
@@ -29,42 +33,6 @@ def derive_state_changes(
     merged = _inherit_source_items_for_spawned_corpses(merged, state)
     return merged
 
-
-def resolve_implied_entity(action: Action, state: Any) -> str:
-    target_text = str(action.get("target") or "").strip()
-    if not target_text:
-        return ""
-
-    for source_id, source in state.entities.items():
-        if not state.is_interactable_entity(source_id):
-            continue
-        for implied in _iter_implied_specs(source, target_text, state):
-            template = _resolve_implied_template(implied, state)
-            if not template or not template.get("entity"):
-                continue
-            entity = _render_implied_entity(template, source_id, source, state)
-            if not _matches_implied_target(target_text, entity, implied, source):
-                continue
-
-            entity_id = _render_source_template(
-                str(template.get("id_template") or f"{source_id}_{_implied_kind(implied)}"),
-                source_id,
-                source,
-                state,
-            )
-            if not entity_id:
-                continue
-            existing_id = state.find_entity_id(entity_id) or state.find_entity_id(str(entity.get("name") or ""))
-            if existing_id:
-                return existing_id
-
-            entity["_origin_kind"] = "derived"
-            entity["_source_action"] = action_family(action)
-            entity["_source_entity_id"] = source_id
-            entity["_rule_id"] = f"implied:{_implied_kind(implied)}"
-            state.apply_changes({"spawn_entities": {entity_id: entity}})
-            return entity_id
-    return ""
 
 
 def _expand_spawn_implied_entities(changes: StateChanges, state: Any) -> StateChanges:
@@ -133,7 +101,7 @@ def _inherit_source_items_for_spawned_corpses(changes: StateChanges, state: Any)
             continue
 
         corpse["source"] = source_id
-        corpse["inventory"] = _dedupe([*list(corpse.get("inventory", [])), *inherited_item_ids])
+        corpse["inventory"] = dedupe_preserving_order([*list(corpse.get("inventory", [])), *inherited_item_ids])
         for item_id in inherited_item_ids:
             item_changes = result["set_entity_states"].setdefault(item_id, {})
             item_changes.update(
@@ -161,7 +129,7 @@ def _source_item_ids(source_id: str, state: Any) -> list[str]:
     for entity_id, entity in state.entities.items():
         if str(entity.get("source") or "") == source_id and _is_item_like(entity):
             item_ids.append(str(entity_id))
-    return _dedupe([item_id for item_id in item_ids if item_id in state.entities])
+    return dedupe_preserving_order([item_id for item_id in item_ids if item_id in state.entities])
 
 
 def _flatten_entity_refs(value: Any) -> list[str]:
@@ -185,17 +153,6 @@ def _is_item_like(entity: dict[str, Any]) -> bool:
     return entity.get("type") in {"item", "pickup"} or "item" in tags or "equipment" in tags
 
 
-def _dedupe(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        result.append(item)
-    return result
-
-
 def _matches_rule(
     rule: dict[str, Any],
     action: Action,
@@ -207,28 +164,28 @@ def _matches_rule(
     if not isinstance(when, dict):
         return False
 
-    if "result" in when and not _matches_value(str(check.get("result") or ""), when["result"]):
+    if "result" in when and not matches_value(str(check.get("result") or ""), when["result"]):
         return False
 
     family = action_family(action)
-    if "intent_family" in when and not _matches_value(family, when["intent_family"]):
+    if "intent_family" in when and not matches_value(family, when["intent_family"]):
         return False
 
     target_id = str(action.get("target_id") or "")
     target = _projected_target(target_id, explicit_changes, state)
-    if "target_id" in when and not _matches_value(target_id, when["target_id"]):
+    if "target_id" in when and not matches_value(target_id, when["target_id"]):
         return False
-    if "target_type" in when and not _matches_value(str(target.get("type") or ""), when["target_type"]):
+    if "target_type" in when and not matches_value(str(target.get("type") or ""), when["target_type"]):
         return False
-    if "target" in when and not _matches_object(target, when["target"]):
+    if "target" in when and not matches_object(target, when["target"]):
         return False
-    if "flags" in when and not _matches_object(state.flags, when["flags"]):
+    if "flags" in when and not matches_object(state.flags, when["flags"]):
         return False
 
     target_tags = target.get("tags", [])
-    if "target_tags" in when and not _matches_all_tags(target_tags, when["target_tags"]):
+    if "target_tags" in when and not matches_all_tags(target_tags, when["target_tags"]):
         return False
-    if "any_target_tags" in when and not _matches_any_tag(target_tags, when["any_target_tags"]):
+    if "any_target_tags" in when and not matches_any_tag(target_tags, when["any_target_tags"]):
         return False
 
     return True
@@ -264,149 +221,6 @@ def _changes_for_rule(
 
     return {"spawn_entities": {entity_id: entity}}
 
-
-def _iter_implied_specs(source: dict[str, Any], target_text: str, state: Any) -> list[Any]:
-    specs: list[Any] = []
-    for key in ("implied_equipment", "implied_entities"):
-        value = source.get(key, [])
-        if isinstance(value, str):
-            specs.append(value)
-        elif isinstance(value, list):
-            specs.extend(value)
-    specs.extend(_rule_implied_specs(source, target_text, state))
-    return specs
-
-
-def _rule_implied_specs(source: dict[str, Any], target_text: str, state: Any) -> list[Any]:
-    specs: list[Any] = []
-    rules = []
-    configured_rules = state.script.get("implied_entity_rules", [])
-    if isinstance(configured_rules, list):
-        rules.extend(configured_rules)
-
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        when = rule.get("when", {})
-        if not isinstance(when, dict):
-            continue
-        if not _matches_source_terms(source, when.get("source_terms", [])):
-            continue
-        target_terms = when.get("target_terms", [])
-        if target_terms and not _matches_target_terms(target_text, target_terms, source):
-            continue
-        implies = rule.get("implies", [])
-        if isinstance(implies, str):
-            specs.append(implies)
-        elif isinstance(implies, list):
-            specs.extend(implies)
-    return specs
-
-
-def _resolve_implied_template(implied: Any, state: Any) -> dict[str, Any]:
-    if isinstance(implied, dict) and "entity" in implied:
-        return deepcopy(implied)
-
-    kind = _canonical_implied_kind(_implied_kind(implied))
-    templates = state.script.get("implied_entity_templates", {})
-    if isinstance(templates, dict) and isinstance(templates.get(kind), dict):
-        return deepcopy(templates[kind])
-    return {}
-
-
-def _render_implied_entity(
-    template: dict[str, Any],
-    source_id: str,
-    source: dict[str, Any],
-    state: Any,
-) -> dict[str, Any]:
-    entity = template.get("entity", {})
-    if not isinstance(entity, dict):
-        entity = {}
-    return _render_source_value(entity, source_id, source, state)
-
-
-def _matches_implied_target(target_text: str, entity: dict[str, Any], implied: Any, source: dict[str, Any]) -> bool:
-    candidates = _target_candidates(target_text, source)
-    names = [
-        _canonical_implied_kind(_implied_kind(implied)),
-        _implied_kind(implied),
-        str(entity.get("name") or ""),
-        *[str(alias) for alias in entity.get("aliases", [])],
-        *[str(tag) for tag in entity.get("tags", [])],
-    ]
-    normalized_names = {name.lower().strip() for name in names if name}
-    return any(
-        candidate and name and (candidate in name or name in candidate)
-        for candidate in candidates
-        for name in normalized_names
-    )
-
-
-def _implied_kind(implied: Any) -> str:
-    if isinstance(implied, str):
-        return implied
-    if isinstance(implied, dict):
-        return str(implied.get("kind") or implied.get("id") or implied.get("name") or "")
-    return ""
-
-
-def _canonical_implied_kind(kind: str) -> str:
-    return kind
-
-
-def _target_candidates(target_text: str, source: dict[str, Any]) -> set[str]:
-    normalized = target_text.lower().strip()
-    candidates = {normalized, _strip_possessive(normalized, source)}
-    return {candidate for candidate in candidates if candidate}
-
-
-def _strip_possessive(text: str, source: dict[str, Any]) -> str:
-    stripped = text.strip()
-    for prefix in PRONOUN_POSSESSIVES:
-        if stripped.startswith(prefix):
-            return stripped.removeprefix(prefix).strip()
-    source_names = [
-        str(source.get("name") or ""),
-        *[str(alias) for alias in source.get("aliases", [])],
-    ]
-    for source_name in sorted(set(source_names), key=len, reverse=True):
-        prefix = f"{source_name.lower()}的"
-        if source_name and stripped.startswith(prefix):
-            return stripped.removeprefix(prefix).strip()
-    if "的" in stripped:
-        return stripped.split("的", 1)[1].strip()
-    return stripped
-
-
-def _matches_source_terms(source: dict[str, Any], source_terms: object) -> bool:
-    if isinstance(source_terms, str):
-        source_terms = [source_terms]
-    if not isinstance(source_terms, list):
-        return False
-    source_values = [
-        str(source.get("name") or ""),
-        *[str(alias) for alias in source.get("aliases", [])],
-        *[str(tag) for tag in source.get("tags", [])],
-        str(source.get("type") or ""),
-    ]
-    normalized_values = [value.lower() for value in source_values if value]
-    return any(
-        term and any(term.lower() in value or value in term.lower() for value in normalized_values)
-        for term in source_terms
-    )
-
-
-def _matches_target_terms(target_text: str, target_terms: object, source: dict[str, Any]) -> bool:
-    if isinstance(target_terms, str):
-        target_terms = [target_terms]
-    if not isinstance(target_terms, list):
-        return False
-    candidates = _target_candidates(target_text, source)
-    return any(
-        term and any(term.lower() in candidate or candidate in term.lower() for candidate in candidates)
-        for term in target_terms
-    )
 
 
 def _projected_target(target_id: str, explicit_changes: StateChanges, state: Any) -> dict[str, Any]:
@@ -448,16 +262,9 @@ def _merge_changes(target: StateChanges, source: StateChanges) -> None:
 
 
 def _render_value(value: Any, target_id: str, target: dict[str, Any], state: Any) -> Any:
-    if isinstance(value, str):
-        return _render_template(value, target_id, target, state)
-    if isinstance(value, list):
-        return [_render_value(item, target_id, target, state) for item in value]
-    if isinstance(value, dict):
-        return {
-            str(_render_value(key, target_id, target, state)): _render_value(item, target_id, target, state)
-            for key, item in value.items()
-        }
-    return value
+    def _leaf(v: Any) -> Any:
+        return _render_template(v, target_id, target, state) if isinstance(v, str) else v
+    return traverse_replace(value, _leaf)
 
 
 def _render_template(value: str, target_id: str, target: dict[str, Any], state: Any) -> str:
@@ -469,55 +276,5 @@ def _render_template(value: str, target_id: str, target: dict[str, Any], state: 
     )
 
 
-def _render_source_value(value: Any, source_id: str, source: dict[str, Any], state: Any) -> Any:
-    if isinstance(value, str):
-        return _render_source_template(value, source_id, source, state)
-    if isinstance(value, list):
-        return [_render_source_value(item, source_id, source, state) for item in value]
-    if isinstance(value, dict):
-        return {
-            str(_render_source_value(key, source_id, source, state)): _render_source_value(item, source_id, source, state)
-            for key, item in value.items()
-        }
-    return value
 
 
-def _render_source_template(value: str, source_id: str, source: dict[str, Any], state: Any) -> str:
-    return (
-        value.replace("$source_id", source_id)
-        .replace("$source_name", str(source.get("name") or source_id))
-        .replace("$turn_id", str(getattr(state, "turn_id", 0)))
-    )
-
-
-def _matches_value(actual: object, expected: object) -> bool:
-    if isinstance(expected, list):
-        return actual in expected
-    return actual == expected
-
-
-def _matches_object(actual: dict[str, object], expected: object) -> bool:
-    if not isinstance(expected, dict):
-        return False
-    for key, expected_value in expected.items():
-        if actual.get(str(key)) != expected_value:
-            return False
-    return True
-
-
-def _matches_all_tags(entity_tags: object, required_tags: object) -> bool:
-    tags = entity_tags if isinstance(entity_tags, list) else []
-    if isinstance(required_tags, str):
-        required_tags = [required_tags]
-    elif not isinstance(required_tags, list):
-        return False
-    return all(tag in tags for tag in required_tags)
-
-
-def _matches_any_tag(entity_tags: object, required_tags: object) -> bool:
-    tags = entity_tags if isinstance(entity_tags, list) else []
-    if isinstance(required_tags, str):
-        required_tags = [required_tags]
-    elif not isinstance(required_tags, list):
-        return False
-    return any(tag in tags for tag in required_tags)

@@ -5,6 +5,7 @@ from copy import deepcopy
 from diceflow.core.derivation import derive_state_changes
 from diceflow.core.models import Action, CheckResult, StateChanges
 from diceflow.core.state import GameState
+from diceflow.core.utils import traverse_replace
 from diceflow.scripting.resolver import resolve_action_spec
 
 
@@ -39,50 +40,27 @@ def _expand_placeholders(changes: StateChanges, action: Action, state: GameState
 
 
 def _replace_placeholders(value: object, action: Action, state: GameState) -> object:
-    if value == "$target":
-        return action.get("target_id") or "$target"
-    if value == "$tool":
-        return _tool_entity_id(action, state) or action.get("tool_id") or "$tool"
-    if value == "$tool_debris":
-        tool_id = _tool_entity_id(action, state) or str(action.get("tool_id") or "tool")
-        return f"{tool_id}_debris"
-    if value == "$tool_contents":
-        return list(_tool_entity(action, state).get("contents", []))
-    if isinstance(value, str):
-        target = state.entities.get(str(action.get("target_id") or ""), {})
-        tool = _tool_entity(action, state)
-        return (
-            value.replace("$target_name", str(target.get("name") or action.get("target") or "目标"))
-            .replace("$tool_name", str(tool.get("name") or action.get("tool") or "工具"))
-        )
-    if isinstance(value, list):
-        return [_replace_placeholders(item, action, state) for item in value]
-    if isinstance(value, dict):
-        replaced = {}
-        for key, item in value.items():
-            replaced_key = str(_replace_placeholders(key, action, state))
-            if replaced_key == "spawn_entities":
-                replaced[replaced_key] = {
-                    str(_replace_placeholders(entity_id, action, state)): _replace_spawn_entity(entity, action, state)
-                    for entity_id, entity in item.items()
-                }
-            else:
-                replaced[replaced_key] = _replace_placeholders(item, action, state)
-        return replaced
-    return value
+    tool_entity = _tool_entity(action, state)
+    tool_entity_id = _tool_entity_id(action, state)
+    target = state.entities.get(str(action.get("target_id") or ""), {})
 
-
-def _replace_spawn_entity(value: object, action: Action, state: GameState) -> object:
-    if isinstance(value, dict):
-        return {
-            str(_replace_placeholders(key, action, state)): (
-                item if key == "metadata" else _replace_spawn_entity(item, action, state)
+    def _leaf(v: object) -> object:
+        if v == "$target":
+            return action.get("target_id") or "$target"
+        if v == "$tool":
+            return tool_entity_id or action.get("tool_id") or "$tool"
+        if v == "$tool_debris":
+            return f"{tool_entity_id or str(action.get('tool_id') or 'tool')}_debris"
+        if v == "$tool_contents":
+            return list(tool_entity.get("contents", []))
+        if isinstance(v, str):
+            return (
+                v.replace("$target_name", str(target.get("name") or action.get("target") or "目标"))
+                .replace("$tool_name", str(tool_entity.get("name") or action.get("tool") or "工具"))
             )
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_replace_spawn_entity(item, action, state) for item in value]
-    return _replace_placeholders(value, action, state)
+        return v
+
+    return traverse_replace(value, _leaf)
 
 
 def _tool_entity_id(action: Action, state: GameState) -> str:

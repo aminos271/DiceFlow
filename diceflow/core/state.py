@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.app.hints import entity_action_hint, get_allowed_actions, scene_action_hint
 from diceflow.core.lifecycle import (
     cleanup_expired_entities,
     initialize_entity,
@@ -10,8 +11,9 @@ from diceflow.core.lifecycle import (
     mark_removed_entity,
     prepare_spawned_entity,
 )
-from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
 from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
+from diceflow.core.utils import dedupe_preserving_order
+from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
 
 
 class GameState:
@@ -101,14 +103,14 @@ class GameState:
         hints: list[str] = []
 
         for action_type in self.script.get("scene_actions", {}):
-            hints.append(_scene_action_hint(str(action_type)))
+            hints.append(scene_action_hint(str(action_type)))
 
         for entity in self.get_visible_entities().values():
             entity_name = str(entity.get("name") or "目标")
-            for action_type in _get_allowed_actions(entity):
-                hints.append(_entity_action_hint(str(action_type), entity_name))
+            for action_type in get_allowed_actions(entity):
+                hints.append(entity_action_hint(str(action_type), entity_name))
 
-        return _dedupe_preserving_order(hints)
+        return dedupe_preserving_order(hints)
 
     def find_entity_id(self, target: str | None) -> str | None:
         if not target:
@@ -287,42 +289,5 @@ class GameState:
         return True
 
 
-def _entity_action_hint(action_type: str, entity_name: str) -> str:
-    verb = {
-        "attack": "攻击",
-        "inspect": "检查",
-        "open": "打开",
-        "talk": "交谈",
-        "take": "拿取",
-        "use": "使用道具处理",
-        "throw": "投掷道具砸向",
-        "interact": "互动",
-    }.get(action_type, action_type)
-    return f"{verb}{entity_name}"
 
 
-def _scene_action_hint(action_type: str) -> str:
-    return {
-        "flee": "撤退/拉开距离",
-        "wait": "等待/观察局势",
-        "move": "移动/靠近目标",
-        "unknown": "尝试其他行动",
-    }.get(action_type, action_type)
-
-
-def _get_allowed_actions(entity: dict[str, Any]) -> list[str]:
-    metadata = entity.get("metadata", {})
-    if "allowed_actions" in metadata:
-        return list(metadata["allowed_actions"])
-    return list(metadata.get("actions", {}).keys())
-
-
-def _dedupe_preserving_order(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        deduped.append(item)
-    return deduped

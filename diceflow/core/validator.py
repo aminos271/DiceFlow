@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from diceflow.core.intent import action_family, normalize_action
-from diceflow.core.derivation import resolve_implied_entity
+from diceflow.core.implied_entity import resolve_implied_entity
 from diceflow.core.models import Action
 from diceflow.core.state import GameState
 from diceflow.scripting.resolver import get_allowed_actions, resolve_action_spec

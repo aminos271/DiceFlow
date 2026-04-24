@@ -4,6 +4,7 @@ from typing import Any
 
 from diceflow.core.models import TurnRecord
 from diceflow.core.state import GameState
+from diceflow.core.utils import result_label
 
 
 # ── ANSI color codes ──────────────────────────────────────────────────
@@ -77,7 +78,7 @@ def render_turn_result(record: TurnRecord) -> str:
         result = str(check.get("result", "unknown"))
         rc = _result_color(result)
         lines.append(f"\n  {rc}{_result_emoji(result)} {record.summary}{RESET}")
-        lines.append(f"  {DIM}🎲 d20={check.get('roll', '?')} / DC {check.get('dc', '?')}  {rc}{_result_label(result)}{RESET}")
+        lines.append(f"  {DIM}🎲 d20={check.get('roll', '?')} / DC {check.get('dc', '?')}  {rc}{result_label(result)}{RESET}")
     else:
         lines.append(f"\n  {RED}⛔ 无效行动 | {record.validation.get('reason', '未知')}{RESET}")
     if record.narration:
@@ -126,16 +127,6 @@ def _result_emoji(result: str) -> str:
         "critical_fail": "💥",
         "impossible": "🚫",
     }.get(result, "❓")
-
-
-def _result_label(result: str) -> str:
-    return {
-        "critical_success": "大成功",
-        "success": "成功",
-        "fail": "失败",
-        "critical_fail": "大失败",
-        "impossible": "不可能",
-    }.get(result, result)
 
 
 def _entity_label(entity_id: str, entity: dict[str, Any]) -> str:

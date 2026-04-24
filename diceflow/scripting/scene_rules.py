@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from diceflow.core.intent import action_family
+from diceflow.core.matching import matches_all_tags, matches_any_tag, matches_object, matches_value
 from diceflow.core.models import Action
 from diceflow.core.state import GameState
 
@@ -51,34 +52,34 @@ def matches_when(when: object, action: Action, state: GameState) -> bool:
     target_id = str(action.get("target_id") or "")
     target = state.entities.get(target_id, {})
 
-    if "intent_family" in when and not _matches_value(action_type, when["intent_family"]):
+    if "intent_family" in when and not matches_value(action_type, when["intent_family"]):
         return False
-    if "target_id" in when and not _matches_value(target_id, when["target_id"]):
+    if "target_id" in when and not matches_value(target_id, when["target_id"]):
         return False
-    if "target_type" in when and not _matches_value(str(target.get("type") or ""), when["target_type"]):
+    if "target_type" in when and not matches_value(str(target.get("type") or ""), when["target_type"]):
         return False
-    if "target" in when and not _matches_object(target, when["target"]):
+    if "target" in when and not matches_object(target, when["target"]):
         return False
-    if "flags" in when and not _matches_object(state.flags, when["flags"]):
+    if "flags" in when and not matches_object(state.flags, when["flags"]):
         return False
 
     entities = when.get("entities", {})
     if isinstance(entities, dict):
         for entity_id, expected in entities.items():
-            if not _matches_object(state.entities.get(str(entity_id), {}), expected):
+            if not matches_object(state.entities.get(str(entity_id), {}), expected):
                 return False
 
     target_tags = target.get("tags", [])
-    if "target_tags" in when and not _matches_all_tags(target_tags, when["target_tags"]):
+    if "target_tags" in when and not matches_all_tags(target_tags, when["target_tags"]):
         return False
-    if "any_target_tags" in when and not _matches_any_tag(target_tags, when["any_target_tags"]):
+    if "any_target_tags" in when and not matches_any_tag(target_tags, when["any_target_tags"]):
         return False
 
     tool = _resolve_tool_entity(action, state)
     tool_tags = tool.get("tags", [])
-    if "tool_tags" in when and not _matches_all_tags(tool_tags, when["tool_tags"]):
+    if "tool_tags" in when and not matches_all_tags(tool_tags, when["tool_tags"]):
         return False
-    if "any_tool_tags" in when and not _matches_any_tag(tool_tags, when["any_tool_tags"]):
+    if "any_tool_tags" in when and not matches_any_tag(tool_tags, when["any_tool_tags"]):
         return False
 
     return True
@@ -101,36 +102,3 @@ def _resolve_tool_entity(action: Action, state: GameState) -> dict[str, object]:
     return {}
 
 
-def _matches_value(actual: object, expected: object) -> bool:
-    if isinstance(expected, list):
-        return actual in expected
-    return actual == expected
-
-
-def _matches_object(actual: dict[str, object], expected: object) -> bool:
-    if not isinstance(expected, dict):
-        return False
-    for key, expected_value in expected.items():
-        if actual.get(str(key)) != expected_value:
-            return False
-    return True
-
-
-def _matches_all_tags(entity_tags: list[str] | None, required_tags: object) -> bool:
-    if entity_tags is None:
-        entity_tags = []
-    if isinstance(required_tags, str):
-        required_tags = [required_tags]
-    elif not isinstance(required_tags, list):
-        return False
-    return all(tag in entity_tags for tag in required_tags)
-
-
-def _matches_any_tag(entity_tags: list[str] | None, required_tags: object) -> bool:
-    if entity_tags is None:
-        entity_tags = []
-    if isinstance(required_tags, str):
-        required_tags = [required_tags]
-    elif not isinstance(required_tags, list):
-        return False
-    return any(tag in entity_tags for tag in required_tags)

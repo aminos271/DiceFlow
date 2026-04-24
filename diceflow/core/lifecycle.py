@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.core.utils import deep_merge
+
 
 DEFAULT_CLEANUP = {"policy": "never"}
 
@@ -108,7 +110,7 @@ def _merged_lifecycle(
         "cleanup": deepcopy(DEFAULT_CLEANUP),
     }
     if isinstance(lifecycle, dict):
-        merged = _deep_merge(base, lifecycle)
+        merged = deep_merge(base, lifecycle)
         if not merged.get("origin"):
             merged["origin"] = origin
         if not merged.get("phase"):
@@ -129,11 +131,3 @@ def _phase_for_entity(entity: dict[str, Any]) -> str:
     return "active"
 
 
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    merged = deepcopy(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge(merged[key], value)
-        else:
-            merged[key] = deepcopy(value)
-    return merged

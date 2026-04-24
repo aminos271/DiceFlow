@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from diceflow.core.utils import deep_merge
+
 
 Script = dict[str, Any]
 ENTITY_RUNTIME_DEFAULTS = {
@@ -341,18 +343,10 @@ def materialize_script(script: Script) -> Script:
 def materialize_entity(entity: dict[str, Any], entity_id: str | None = None) -> dict[str, Any]:
     entity_type = str(entity.get("type") or "")
     base = deepcopy(ENTITY_ARCHETYPES.get(entity_type, ENTITY_RUNTIME_DEFAULTS))
-    merged = _deep_merge(base, deepcopy(entity))
+    merged = deep_merge(base, deepcopy(entity))
     return _render_entity_templates(merged, entity_id)
 
 
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    merged = deepcopy(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
 
 
 def _render_entity_templates(entity: dict[str, Any], entity_id: str | None) -> dict[str, Any]:

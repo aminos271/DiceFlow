@@ -4,8 +4,10 @@ from copy import deepcopy
 from typing import Any
 
 from diceflow.core.intent import action_family
+from diceflow.core.matching import matches_all_tags, matches_any_tag, matches_value
 from diceflow.core.models import Action, CheckResult, StateChanges
 from diceflow.core.state import GameState
+from diceflow.core.utils import traverse_replace
 from diceflow.scripting.scene_rules import matches_when
 
 
@@ -58,7 +60,7 @@ def _matches_reaction_rule(
         return False
 
     result = str(check.get("result") or "")
-    if "result" in when and not _matches_value(result, when["result"]):
+    if "result" in when and not matches_value(result, when["result"]):
         return False
 
     if "target_alive" in when:
@@ -103,9 +105,9 @@ def _matches_actor_tags(actor: dict[str, Any], when: object) -> bool:
     if not isinstance(when, dict):
         return True
     tags = actor.get("tags", [])
-    if "actor_tags" in when and not _matches_all_tags(tags, when["actor_tags"]):
+    if "actor_tags" in when and not matches_all_tags(tags, when["actor_tags"]):
         return False
-    if "any_actor_tags" in when and not _matches_any_tag(tags, when["any_actor_tags"]):
+    if "any_actor_tags" in when and not matches_any_tag(tags, when["any_actor_tags"]):
         return False
     return True
 
@@ -128,22 +130,17 @@ def _replace_placeholders(value: object, action: Action, actor_id: str, state: G
         return actor_id
     if value == "$target":
         return target_id or "$target"
-    if isinstance(value, str):
-        return (
-            value.replace("$actor_name", str(actor.get("name") or actor_id or "actor"))
-            .replace("$target_name", str(target.get("name") or action.get("target") or "target"))
-            .replace("$action_family", action_family(action))
-        )
-    if isinstance(value, list):
-        return [_replace_placeholders(item, action, actor_id, state) for item in value]
-    if isinstance(value, dict):
-        return {
-            str(_replace_placeholders(key, action, actor_id, state)): _replace_placeholders(
-                item, action, actor_id, state
+
+    def _leaf(v: object) -> object:
+        if isinstance(v, str):
+            return (
+                v.replace("$actor_name", str(actor.get("name") or actor_id or "actor"))
+                .replace("$target_name", str(target.get("name") or action.get("target") or "target"))
+                .replace("$action_family", action_family(action))
             )
-            for key, item in value.items()
-        }
-    return value
+        return v
+
+    return traverse_replace(value, _leaf)
 
 
 def _merge_values(left: Any, right: Any) -> Any:
@@ -164,23 +161,3 @@ def _merge_values(left: Any, right: Any) -> Any:
     return deepcopy(right)
 
 
-def _matches_value(actual: object, expected: object) -> bool:
-    if isinstance(expected, list):
-        return actual in expected
-    return actual == expected
-
-
-def _matches_all_tags(entity_tags: object, required_tags: object) -> bool:
-    tags = entity_tags if isinstance(entity_tags, list) else []
-    required = [required_tags] if isinstance(required_tags, str) else required_tags
-    if not isinstance(required, list):
-        return False
-    return all(tag in tags for tag in required)
-
-
-def _matches_any_tag(entity_tags: object, required_tags: object) -> bool:
-    tags = entity_tags if isinstance(entity_tags, list) else []
-    required = [required_tags] if isinstance(required_tags, str) else required_tags
-    if not isinstance(required, list):
-        return False
-    return any(tag in tags for tag in required)
