@@ -46,6 +46,8 @@ uploads/
 temp/
 qdrant_storage/
 plan/
+web/node_modules/
+web/dist/
 
 #==========================
 # AI
