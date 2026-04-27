@@ -20,13 +20,24 @@ export default function TurnCard({ turn }) {
       <div className="turn-header">
         <span className="turn-id">回合 {turn_id}</span>
       </div>
-      <div className="player-input">{player_input}</div>
+      <div className="player-action">
+        <span className="action-label">玩家</span>
+        <span className="action-text">{player_input}</span>
+      </div>
       {check && (
-        <div className={`dice-roll ${isSuccess ? 'success' : 'fail'}`}>
-          🎲 d20={check.roll} / DC {check.dc} {resultLabel(result)}
+        <div className="judgment">
+          <span className="action-label">判定</span>
+          <span className={`dice-roll ${isSuccess ? 'success' : 'fail'}`}>
+            🎲 d20={check.roll} / DC {check.dc} {resultLabel(result)}
+          </span>
         </div>
       )}
-      {narration && <div className="narration">{narration}</div>}
+      {narration && (
+        <div className="narration-section">
+          <span className="action-label">结果</span>
+          <span className="narration">{narration}</span>
+        </div>
+      )}
     </div>
   )
 }

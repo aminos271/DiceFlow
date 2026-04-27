@@ -1,8 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getSession, runTurn, runMeta } from '../api.js'
 import TurnHistory from '../components/TurnHistory.jsx'
 import StatusSidebar from '../components/StatusSidebar.jsx'
 import InputBar from '../components/InputBar.jsx'
+
+const PROGRESS_STEPS = [
+  { delay: 0, text: '解析行动中...' },
+  { delay: 300, text: '判定中...' },
+  { delay: 800, text: '生成叙事中...' },
+]
 
 export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory, onSessionEnded }) {
   const [turns, setTurns] = useState([])
@@ -10,6 +16,9 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const [isGameOver, setIsGameOver] = useState(false)
   const [ending, setEnding] = useState(null)
   const [sending, setSending] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState('')
+  const [metaToast, setMetaToast] = useState('')
+  const timersRef = useRef([])
 
   useEffect(() => {
     getSession(sessionId)
@@ -22,10 +31,28 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
       .catch(console.error)
   }, [sessionId])
 
+  useEffect(() => {
+    // Cleanup timers on unmount
+    return () => timersRef.current.forEach(clearTimeout)
+  }, [])
+
+  const clearTimers = () => {
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current = []
+  }
+
   const handleSend = useCallback(async (input) => {
     setSending(true)
+    clearTimers()
+    // Start progress simulation
+    PROGRESS_STEPS.forEach(({ delay, text }) => {
+      const id = setTimeout(() => setPendingStatus(text), delay)
+      timersRef.current.push(id)
+    })
     try {
       const data = await runTurn(sessionId, input)
+      clearTimers()
+      setPendingStatus('')
       setTurns((prev) => [...prev, data.turn])
       setStatus(data.status || null)
       if (data.is_game_over) {
@@ -34,6 +61,8 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
         onSessionEnded()
       }
     } catch (err) {
+      clearTimers()
+      setPendingStatus('')
       alert(`行动失败: ${err.message}`)
     } finally {
       setSending(false)
@@ -43,21 +72,14 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const handleMeta = useCallback(async (command) => {
     try {
       const data = await runMeta(sessionId, command)
-      if (data.result) {
-        setTurns((prev) => [
-          ...prev,
-          {
-            turn_id: `meta-${Date.now()}`,
-            player_input: `/${command}`,
-            check: null,
-            narration: data.result,
-          },
-        ])
-      }
       if (data.status) {
         setStatus(data.status)
         setIsGameOver(data.status.is_game_over || false)
         setEnding(data.status.ending || null)
+      }
+      if (data.result) {
+        setMetaToast(data.result)
+        setTimeout(() => setMetaToast(''), 2500)
       }
     } catch (err) {
       alert(`查看失败: ${err.message}`)
@@ -87,6 +109,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
         <StatusSidebar status={status} />
       </div>
 
+      {metaToast && <div className="meta-toast">{metaToast}</div>}
       {isGameOver ? (
         <div className="game-over-overlay">
           <span className="ending">结局: {endingLabel(ending)}</span>
@@ -97,6 +120,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
           onSend={handleSend}
           onMeta={handleMeta}
           disabled={sending}
+          pendingStatus={pendingStatus}
           gameOver={isGameOver}
         />
       )}
