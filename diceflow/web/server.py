@@ -145,6 +145,11 @@ def delete_session(session_id: str) -> dict[str, str]:
     return {"status": "deleted", "session_id": session_id}
 
 
+@app.post("/api/sessions/{session_id}/delete")
+def delete_session_via_post(session_id: str) -> dict[str, str]:
+    return delete_session(session_id)
+
+
 @app.post("/api/sessions/{session_id}/turns")
 def run_turn(session_id: str, body: TurnRequest) -> dict[str, Any]:
     session = store.get(session_id)

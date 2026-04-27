@@ -367,6 +367,14 @@ class TestSessionDelete:
         assert resp.json()["status"] == "deleted"
         assert isolated_store.get(sid) is None
 
+    def test_delete_session_via_post_fallback(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/delete")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+        assert isolated_store.get(sid) is None
+
     def test_delete_nonexistent_session(self, isolated_store):
         resp = client.delete("/api/sessions/deadbeef1234")
         assert resp.status_code == 404

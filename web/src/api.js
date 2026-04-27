@@ -53,7 +53,7 @@ export function updateSession(sessionId, displayName) {
 }
 
 export function deleteSession(sessionId) {
-  return request(`/sessions/${sessionId}`, {
-    method: 'DELETE',
+  return request(`/sessions/${sessionId}/delete`, {
+    method: 'POST',
   })
 }
