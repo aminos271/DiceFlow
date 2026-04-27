@@ -7,6 +7,7 @@ from typing import Any
 from openai import OpenAI
 
 from diceflow import config
+from diceflow.core.dynamic_world import _world_contract
 from diceflow.core.models import Action, CheckResult, StateChanges
 from diceflow.core.state import GameState
 from diceflow.llm.heuristics import (
@@ -33,6 +34,7 @@ class LLMClient:
         self.narrator_prompt = (PROMPT_DIR / "narrator.txt").read_text(encoding="utf-8")
         self.dynamic_content_prompt = (PROMPT_DIR / "dynamic_content_generator.txt").read_text(encoding="utf-8")
         self.dynamic_world_prompt = (PROMPT_DIR / "dynamic_world_generator.txt").read_text(encoding="utf-8")
+        self.open_ended_content_prompt = (PROMPT_DIR / "open_ended_content.txt").read_text(encoding="utf-8")
 
     def parse_intent(self, player_input: str, state: GameState) -> Action:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
@@ -79,7 +81,9 @@ class LLMClient:
                         "你是 TRPG 动态裁定助手，只做定性评估，不决定数值结果。"
                         "只输出 JSON：plausibility, difficulty, risk, intent_kind。"
                         "difficulty 只能是 easy、medium、hard、impossible。"
-                        "如果合理，JSON 里可以加 spawn_entities 字段来描述生成的新实体（只能生成 container / item / clue / obstacle 类型）。"
+                        "如果合理，JSON 里可以加 spawn_entities 字段来描述生成的新实体（可生成 container / item / clue / obstacle / pickup / npc 类型）。"
+                        "npc 类型限制：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy。"
+                        "pickup 类型限制：只是可拾取的小物品，不可为神器或通关关键物。"
                         "禁止让玩家直接通关、秒杀 Boss、无成本获得神器、修改主线设定或跳过核心挑战。"
                     ),
                 },
@@ -143,6 +147,39 @@ class LLMClient:
                             "validation": validation,
                             "state": _compact_state(state),
                             "existing_scene_actions": list(state.script.get("scene_actions", {})),
+                            "existing_entity_ids": list(state.entities),
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
+    def generate_open_ended_content(
+        self,
+        action: Action,
+        check: CheckResult,
+        state: GameState,
+        result_quality: str,
+    ) -> dict[str, Any]:
+        world = _world_contract(state)
+        content = self._chat(
+            [
+                {"role": "system", "content": self.open_ended_content_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "world": world,
+                            "scene": state.scene,
+                            "action": action,
+                            "check": check,
+                            "result_quality": result_quality,
+                            "state": _compact_state(state),
+                            "allowed_entity_types": world["allowed_entity_types"],
+                            "max_dc": world["max_runtime_dc"],
                             "existing_entity_ids": list(state.entities),
                         },
                         ensure_ascii=False,

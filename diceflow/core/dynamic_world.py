@@ -166,14 +166,22 @@ def _world_contract(state: GameState) -> dict[str, Any]:
     world = state.script.get("world", {})
     if not isinstance(world, dict):
         world = {}
+    # If a script leaves allowed_entity_types empty, derive conservative defaults
+    # from its own entity definitions instead of widening to arbitrary types.
+    script_entity_types = {
+        str(e.get("type", "")).lower()
+        for e in state.script.get("entities", {}).values()
+        if isinstance(e, dict) and e.get("type")
+    }
+    default_entity_types = (script_entity_types | {"pickup", "container", "npc", "obstacle"}) if script_entity_types else ["pickup", "container", "npc", "obstacle"]
     return {
         "premise": str(world.get("premise") or state.script.get("title") or ""),
         "tone": str(world.get("tone") or ""),
         "allowed_scene_types": list(world.get("allowed_scene_types") or ["corridor", "chamber"]),
-        "allowed_entity_types": list(world.get("allowed_entity_types") or ["pickup", "container", "npc", "obstacle"]),
+        "allowed_entity_types": list(world.get("allowed_entity_types") or default_entity_types),
         "forbidden": list(world.get("forbidden") or []),
         "max_runtime_dc": int(world.get("max_runtime_dc") or 14),
-        "max_new_entities_per_transition": int(world.get("max_new_entities_per_transition") or 4),
+        "max_new_entities_per_transition": int(world.get("max_new_entities_per_transition") or 3),
     }
 
 

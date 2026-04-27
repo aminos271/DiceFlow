@@ -17,6 +17,8 @@ ALLOWED_OPS = {"add_entity", "set_flag"}
 DEFAULT_MAX_DC = 15
 MAX_HP = 20
 MAX_DELTA_ABS = 10
+NPC_MAX_HP = 5
+NPC_ALLOWED_ACTIONS = frozenset({"inspect", "talk", "take"})
 
 
 def runtime_content_phase(
@@ -143,6 +145,9 @@ def _sanitize_entity(raw_entity: object, allowed_entity_types: set[str], max_dc:
     if int(entity.get("max_hp", 0) or 0) > MAX_HP:
         raise ValueError("entity max_hp exceeds runtime content limit")
 
+    if entity_type == "npc":
+        _sanitize_npc_entity(entity)
+
     metadata = entity.get("metadata", {})
     if metadata is None:
         metadata = {}
@@ -214,3 +219,29 @@ def _matches_value(actual: object, expected: object) -> bool:
     if isinstance(expected, list):
         return actual in expected
     return actual == expected
+
+
+def _sanitize_npc_entity(entity: dict[str, Any]) -> None:
+    """Apply NPC safety constraints to a runtime-generated NPC entity."""
+    entity["hp"] = min(int(entity.get("hp", NPC_MAX_HP)), NPC_MAX_HP)
+    entity["max_hp"] = entity["hp"]
+    entity["alive"] = True
+    tags = entity.get("tags")
+    if isinstance(tags, list):
+        entity["tags"] = [t for t in tags if t not in {"hostile", "enemy"}]
+    elif not isinstance(tags, list):
+        entity["tags"] = ["dynamic", "npc", "generated"]
+    metadata = entity.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        entity["metadata"] = metadata
+    raw_allowed = metadata.get("allowed_actions", ["inspect", "talk"])
+    if isinstance(raw_allowed, list):
+        metadata["allowed_actions"] = [a for a in raw_allowed if a in NPC_ALLOWED_ACTIONS]
+    if not metadata.get("allowed_actions"):
+        metadata["allowed_actions"] = ["inspect", "talk"]
+    actions = metadata.get("actions")
+    if isinstance(actions, dict):
+        metadata["actions"] = {
+            k: v for k, v in actions.items() if k in NPC_ALLOWED_ACTIONS
+        }

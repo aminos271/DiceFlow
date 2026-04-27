@@ -6,14 +6,24 @@ from typing import Any
 from diceflow.app.ui import (
     render_action_hints,
     render_debug,
+    render_help_panel,
+    render_inventory_panel,
+    render_meta_result,
     render_prompt,
     render_scene_panel,
     render_status_panel,
     render_turn_result,
 )
+
+META_LOOK = frozenset({"look", "l", "看", "观察", "环顾", "查看", "环视"})
+META_INV = frozenset({"inv", "inventory", "i", "背包", "物品", "道具", "装备"})
+META_STATUS = frozenset({"status", "st", "状态", "血量", "生命"})
+META_HELP = frozenset({"help", "h", "?", "？", "帮助", "说明", "指令"})
+META_HINT = frozenset({"hint", "提示", "线索", "建议", "行动"})
 from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.dynamic_world import dynamic_world_phase
 from diceflow.core.models import TurnRecord
+from diceflow.core.open_ended_content import open_ended_content_phase
 from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
 from diceflow.core.runtime_content import runtime_content_phase
@@ -70,12 +80,16 @@ class Game:
             assessment = self.adjudicator.assess(action, self.state, self.llm)
             check = self.adjudicator.resolve(assessment)
             changes = self.adjudicator.update_state(action, check, self.state)
+            open_ended_changes = open_ended_content_phase(action, check, changes, self.state, self.llm)
+            if open_ended_changes:
+                changes = _suppress_open_ended_fallback_spawn(changes, check)
             self.state.apply_changes(changes)
+            self.state.apply_changes(open_ended_changes)
             content_changes = runtime_content_phase(action, check, changes, self.state, self.llm)
             self.state.apply_changes(content_changes)
             reaction_changes = reaction_phase(action, check, changes, self.state)
             self.state.apply_changes(reaction_changes)
-            turn_changes = merge_state_changes(changes, content_changes, reaction_changes)
+            turn_changes = merge_state_changes(changes, open_ended_changes, content_changes, reaction_changes)
             narration = narrate(action, check, turn_changes, self.state, self.llm)
             summary = _make_summary(action, check, turn_changes)
             dynamic_validation = {
@@ -171,6 +185,11 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
         if not player_input:
             continue
 
+        meta_result = _handle_meta(player_input, game)
+        if meta_result is not None:
+            print(meta_result)
+            continue
+
         record = game.run_turn(player_input)
         if debug:
             print(render_debug(record), file=sys.stderr)
@@ -179,6 +198,22 @@ def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: boo
     ending = game.state.flags.get("ending")
     if ending:
         print(_ending_text(ending))
+
+
+def _handle_meta(player_input: str, game: Game) -> str | None:
+    """Handle meta-commands that don't consume a turn. Returns rendered output or None."""
+    inp = player_input.strip().lower()
+    if inp in META_HELP:
+        return render_help_panel()
+    if inp in META_LOOK:
+        return render_meta_result("你环顾四周。") + "\n" + render_scene_panel(game.state)
+    if inp in META_INV:
+        return render_inventory_panel(game.state)
+    if inp in META_STATUS:
+        return render_status_panel(game.state)
+    if inp in META_HINT:
+        return render_action_hints(game.state)
+    return None
 
 
 def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[str, Any]) -> str:
@@ -193,6 +228,19 @@ def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[s
     result = check.get("result", "unknown")
     event = "；".join(changes.get("events", []))
     return f"{action_type} {target} -> {result}。{event}"
+
+
+def _suppress_open_ended_fallback_spawn(changes: dict[str, Any], check: dict[str, Any]) -> dict[str, Any]:
+    """Drop generic discover/environment fallback spawns when LLM content fills the result."""
+    assessment = check.get("assessment", {})
+    intent_kind = str(assessment.get("intent_kind") or "") if isinstance(assessment, dict) else ""
+    if intent_kind not in {"discover", "create_environment"} or "spawn_entities" not in changes:
+        return changes
+
+    filtered = dict(changes)
+    filtered.pop("spawn_entities", None)
+    filtered.pop("runtime_script_patch", None)
+    return filtered
 
 
 def _ending_text(ending: str) -> str:

@@ -22,10 +22,30 @@ VALID_RISK = {"low", "medium", "high"}
 VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social", "discover", "create_environment", "transition"}
 
 # Safe types for dynamically spawned entities (whitelist, not arbitrary types)
-SAFE_SPAWN_TYPES = {"container", "item", "clue", "obstacle"}
+SAFE_SPAWN_TYPES = {"container", "item", "clue", "obstacle", "pickup", "npc"}
 
 # Allowed keys for dynamically spawned entity specs
-SAFE_SPAWN_ALLOWED_KEYS = frozenset({"name", "aliases", "type", "tags", "contents", "metadata", "hooks", "lifecycle"})
+SAFE_SPAWN_ALLOWED_KEYS = frozenset(
+    {
+        "name",
+        "aliases",
+        "type",
+        "tags",
+        "contents",
+        "metadata",
+        "hooks",
+        "lifecycle",
+        "hp",
+        "max_hp",
+        "item_id",
+        "value",
+        "rarity",
+    }
+)
+
+# NPC spawn safety: max HP, restricted actions, no hostile flag
+NPC_SPAWN_MAX_HP = 5
+NPC_SPAWN_ALLOWED_ACTIONS = frozenset({"inspect", "talk", "take"})
 
 # Minimal fallback for dynamic entity spawning when no script template exists.
 FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
@@ -200,9 +220,14 @@ def _sanitize_assessment(raw: object) -> dict[str, str]:
 def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
     """Validate and sanitize a spawn_entities definition.
 
-    Only allows container / item / clue / obstacle types and a whitelist
-    of safe keys.  All spawned entities are marked ``category: persistent``
-    so they survive beyond the current turn.
+    Only allows container / item / clue / obstacle / pickup / npc types
+    and a whitelist of safe keys. All spawned entities are marked
+    ``category: persistent`` so they survive beyond the current turn.
+
+    NPC spawns are subject to additional safety constraints:
+    - max HP capped at NPC_SPAWN_MAX_HP
+    - actions restricted to inspect/talk/take
+    - hostile/attack tags are stripped
     """
     if not isinstance(spawn, dict):
         return {}
@@ -211,7 +236,8 @@ def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
     for entity_id, spec in spawn.items():
         if not isinstance(spec, dict):
             continue
-        if str(spec.get("type", "")).lower() not in SAFE_SPAWN_TYPES:
+        entity_type = str(spec.get("type", "")).lower()
+        if entity_type not in SAFE_SPAWN_TYPES:
             continue
 
         safe_spec: dict[str, Any] = {}
@@ -221,6 +247,10 @@ def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
 
         if not safe_spec.get("name"):
             safe_spec["name"] = str(entity_id)
+
+        # NPC-specific safety: cap HP, restrict actions, strip hostility
+        if entity_type == "npc":
+            _sanitize_npc_spawn(safe_spec)
 
         # Persist — spawned entities survive across turns
         safe_spec.setdefault("lifecycle", {})
@@ -232,10 +262,52 @@ def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
     return safe_specs
 
 
+def _sanitize_npc_spawn(spec: dict[str, Any]) -> None:
+    """Apply NPC safety constraints to a dynamically spawned NPC entity."""
+    spec["hp"] = min(int(spec.get("hp", NPC_SPAWN_MAX_HP)), NPC_SPAWN_MAX_HP)
+    spec["max_hp"] = spec["hp"]
+    spec["alive"] = True
+    # Strip hostile tags
+    tags = spec.get("tags")
+    if isinstance(tags, list):
+        spec["tags"] = [t for t in tags if t not in {"hostile", "enemy"}]
+    elif not isinstance(tags, list):
+        spec["tags"] = ["dynamic", "npc"]
+    # Restrict allowed actions to safe set
+    metadata = spec.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        spec["metadata"] = metadata
+    raw_allowed = metadata.get("allowed_actions", ["inspect", "talk"])
+    if isinstance(raw_allowed, list):
+        metadata["allowed_actions"] = [a for a in raw_allowed if a in NPC_SPAWN_ALLOWED_ACTIONS]
+    if not metadata.get("allowed_actions"):
+        metadata["allowed_actions"] = ["inspect", "talk"]
+    # Only keep safe action specs
+    actions = metadata.get("actions")
+    if isinstance(actions, dict):
+        metadata["actions"] = {
+            k: v for k, v in actions.items() if k in NPC_SPAWN_ALLOWED_ACTIONS
+        }
+
+
 def _resolve_dynamic_spawn_from_script(intent_kind: str, state: GameState) -> dict[str, dict[str, Any]]:
-    """Resolve spawn_entities from script-level dynamic_entity_templates, with fallback."""
+    """Resolve spawn_entities from script-level dynamic_entity_templates.
+
+    When the script has multi-variant templates (e.g. discover, discover_item,
+    discover_npc), cycles through all matching entries so each discover feels
+    different rather than always generating the same container.
+    """
     templates = state.script.get("dynamic_entity_templates", {})
-    template = templates.get(intent_kind, FALLBACK_DYNAMIC_SPAWN)
+    if templates:
+        # Collect all template keys matching this intent_kind (including sub-variants)
+        candidates = sorted(k for k in templates if k == intent_kind or k.startswith(f"{intent_kind}_"))
+        if candidates:
+            template = templates[candidates[state.turn_id % len(candidates)]]
+        else:
+            template = FALLBACK_DYNAMIC_SPAWN
+    else:
+        template = FALLBACK_DYNAMIC_SPAWN
     entity_id = f"dynamic_{intent_kind}_{state.turn_id}"
     return _sanitize_spawn_spec({entity_id: deepcopy(template)})
 
@@ -254,6 +326,5 @@ def _runtime_patch_for_spawn(spawn: dict[str, dict[str, Any]], state: GameState)
             for entity_id, entity in spawn.items()
         ],
     }
-
 
 

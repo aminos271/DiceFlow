@@ -16,6 +16,18 @@ flags:
   door_open: false
   game_over: false
   ending: ''
+world:
+  premise: 玩家被困在地牢走廊中，需要找到铁钥匙并打开铁门逃离。
+  tone: 阴暗、紧张、低魔
+  allowed_scene_types: [corridor, cell, storage, passage]
+  allowed_entity_types: [pickup, container, npc, obstacle]
+  forbidden:
+  - 现代科技
+  - 枪械
+  - 直接生成出口钥匙之外的通关神器
+  - 绕过铁门逃离地牢
+  max_runtime_dc: 14
+  max_new_entities_per_transition: 3
 entities:
   skeleton_1:
     name: 骷髅守卫

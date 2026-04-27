@@ -31,7 +31,7 @@ def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
         return _sanitize_assessment(
             {
                 "plausibility": "reasonable",
-                "difficulty": "medium",
+                "difficulty": "easy",
                 "risk": "low",
                 "intent_kind": "discover",
             }

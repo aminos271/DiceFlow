@@ -102,6 +102,39 @@ def render_prompt() -> str:
     return f"{CYAN}⚔ >>{RESET} "
 
 
+def render_inventory_panel(state: GameState) -> str:
+    items = state.get_inventory_items()
+    if not items:
+        return f"  {DIM}🎒 背包空空如也。{RESET}"
+    label = "、".join(items)
+    return f"  {WHITE}🎒 背包：{label}{RESET}"
+
+
+def render_help_panel() -> str:
+    lines = [
+        f"  {CYAN}📖 DiceFlow 指令{RESET}",
+        "",
+        f"  {BOLD}回合动作（消耗回合）{RESET}",
+        f"    直接输入你想做的事，例如：{GREEN}攻击守卫{RESET}、{GREEN}检查左门{RESET}、{GREEN}打开左门{RESET}",
+        f"    用中文描述你的行动即可，系统会自动解析。",
+        "",
+        f"  {BOLD}查看指令（不消耗回合）{RESET}",
+        f"    {GREEN}help / 帮助{RESET}        显示本帮助",
+        f"    {GREEN}look / 看 / 观察{RESET}    重新查看周围环境",
+        f"    {GREEN}inv / 背包{RESET}         查看背包中的物品",
+        f"    {GREEN}status / 状态{RESET}      查看当前状态",
+        f"    {GREEN}hint / 提示{RESET}        查看可尝试的行动",
+        "",
+        f"  {BOLD}系统指令{RESET}",
+        f"    {GREEN}q / quit / 退出{RESET}    结束游戏",
+    ]
+    return "\n".join(lines)
+
+
+def render_meta_result(text: str) -> str:
+    return f"\n  {DIM}{text}{RESET}"
+
+
 # ── Internal helpers ──────────────────────────────────────────────────
 
 def _hp_color(hp: int, max_hp: int) -> str:

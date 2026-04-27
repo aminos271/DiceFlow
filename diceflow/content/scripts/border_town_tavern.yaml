@@ -1,0 +1,87 @@
+schema_version: 1
+id: border_town_tavern
+title: 边境小镇酒馆
+intro: 你来到边境小镇的酒馆，想找人打听消息并招募旅伴。15 回合内找到有用的同伴或线索。
+player:
+  hp: 10
+  max_hp: 10
+  inventory: []
+  location: 酒馆
+scene:
+  name: 旅人酒馆
+  description: 昏暗的厅堂里散坐着几个旅人。吧台后，酒馆老板用抹布擦着杯子。壁炉旁钉着一块告示板。
+flags:
+  game_over: false
+  ending: ''
+world:
+  premise: 玩家在边境酒馆中寻找同伴和线索，为接下来的冒险做准备。
+  tone: 粗粝、务实、轻微魔幻
+  allowed_scene_types: [tavern, street, shop]
+  allowed_entity_types: [pickup, container, npc, obstacle]
+  forbidden:
+  - 直接通关
+  - 神器
+  - 军事级别武器
+  max_runtime_dc: 14
+  max_new_entities_per_transition: 3
+entities:
+  barkeeper:
+    name: 酒馆老板
+    aliases: [老板, 店主]
+    type: npc
+    hp: 5
+    max_hp: 5
+    alive: true
+    tags: [npc, friendly]
+    metadata:
+      allowed_actions: [talk, inspect]
+      actions:
+        talk:
+          dc: 8
+          outcomes:
+            success:
+              events: [老板放下杯子："最近不太平，来的人少了很多。"]
+            fail:
+              events: [老板只是摇摇头，继续擦杯子。]
+        inspect:
+          dc: 6
+          outcomes:
+            success:
+              events: [老板虽然态度平淡，但眼神锐利，像是在观察每一个客人。]
+  notice_board:
+    name: 告示板
+    aliases: [告示, 布告栏, 公告, 告示栏]
+    type: pickup
+    tags: [readable]
+    metadata:
+      allowed_actions: [inspect]
+      actions:
+        inspect:
+          dc: 6
+          outcomes:
+            success:
+              events: [告示板上贴着几张泛黄的委托，其中最显眼的是一张"招募护卫：前往废弃哨站"。]
+            fail:
+              events: [告示板上的纸卷大多残缺，你看不清具体内容。]
+scene_actions:
+  wait:
+    dc: 6
+    outcomes:
+      success:
+        events: [你安静地在角落坐下，观察来往的旅人。]
+      fail:
+        events: [你干坐了一会，没什么人注意到你。]
+  unknown:
+    dc: 10
+    outcomes:
+      success:
+        events: [你环顾四周，酒馆里的交谈声并没有因为你而停下。]
+      fail:
+        events: [你不知道该做什么，时间悄然流逝。]
+ending_conditions:
+- ending: death
+  when:
+    player_hp_lte: 0
+- ending: timeout
+  when:
+    turn_id_gte: 15

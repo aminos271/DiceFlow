@@ -116,11 +116,108 @@ dynamic_entity_templates:
     aliases: [暗格, 隐藏格]
     tags: [container, dynamic]
     contents: []
+  discover_clue:
+    type: clue
+    name: 墙上的划痕
+    aliases: [划痕, 刻痕]
+    tags: [clue, dynamic]
+    metadata:
+      allowed_actions: [inspect]
+      actions:
+        inspect:
+          dc: 9
+          outcomes:
+            success:
+              events: [石壁上的划痕排列有一定规律，可能是前人留下的暗号。]
+            fail:
+              events: [光线太暗，你看不清划痕的全貌。]
+  discover_item:
+    type: pickup
+    name: 古旧徽章
+    aliases: [徽章, 旧徽章]
+    tags: [item, dynamic, pickup]
+    item_id: 古旧徽章
+    value: 10
+    rarity: uncommon
+    metadata:
+      allowed_actions: [inspect, take]
+      actions:
+        inspect:
+          dc: 8
+          outcomes:
+            success:
+              events: [你认出这枚徽章属于古墓守卫军，上面刻着早已被遗忘的番号。]
+            fail:
+              events: [徽章锈迹斑斑，你看不清更多细节。]
+        take:
+          dc: 6
+          outcomes:
+            success:
+              move_item_to_inventory: [$target]
+              events: [你取下徽章收进背包，也许之后能派上用场。]
+  discover_npc:
+    type: npc
+    name: 受伤的探险者
+    aliases: [探险者, 伤者]
+    hp: 3
+    max_hp: 5
+    alive: true
+    tags: [npc, dynamic, friendly]
+    metadata:
+      allowed_actions: [inspect, talk]
+      actions:
+        inspect:
+          dc: 8
+          outcomes:
+            success:
+              events: [你发现这位探险者腿部受伤严重，但神志清醒。他身上没有任何武器或物品。]
+            fail:
+              events: [光线太暗，你看不清他的具体伤势。]
+        talk:
+          dc: 10
+          outcomes:
+            success:
+              events: ["他说自己是被守卫击伤的冒险者，并低声告诉你：'守卫换手时左肋会暴露，那是唯一的机会……'"]
+            fail:
+              events: [伤者痛苦地摇头，说不清更多情报。]
   create_environment:
     type: container
     name: 障碍物
     aliases: [障碍, 障碍物]
     tags: [container, obstacle, dynamic]
+runtime_generation_hooks:
+- id: guard_defeated_scene_change
+  when:
+    intent_family: attack
+    result: [success, critical_success]
+    entities:
+      guard_1:
+        alive: false
+  prompt_hint: >-
+    守卫倒下后，石室的细节变得更加清晰。生成1-2个小型可交互内容：
+    墙壁上的痕迹、守卫留下的物品、或者空气中消散的气息。
+  allowed_entity_types: [pickup, container, npc]
+  max_dc: 12
+- id: door_opened_passage
+  when:
+    intent_family: open
+    target_id: left_door
+    result: [success, critical_success]
+  prompt_hint: >-
+    左门打开，冷光通道显现。生成1-2个通往前方的线索或物品：
+    通道壁上的铭文、地上的遗留物、或光的来源。
+  allowed_entity_types: [pickup, container]
+  max_dc: 10
+- id: door_inspected_first_time
+  when:
+    intent_family: inspect
+    target_id: left_door
+    result: [success, critical_success]
+  prompt_hint: >-
+    玩家仔细检查左门后，注意到石室角落中之前被忽略的细节。
+    生成1个小物品或可调查的痕迹。
+  allowed_entity_types: [pickup, container]
+  max_dc: 10
 entities:
   guard_1:
     name: 守卫

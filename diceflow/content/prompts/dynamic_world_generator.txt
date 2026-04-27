@@ -61,6 +61,8 @@
 - 可以 add_scene_action，但 action 只能是 move、inspect、interact、wait、flee。
 - set_flag 只能使用 runtime. 或 generated. 前缀。
 - add_entity 的 type 必须来自 allowed_entity_types。
+- 如果生成 npc 类型：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy。
+- 如果生成 pickup 类型：只是可拾取的小物品，不可为神器或通关关键物。
 - 新实体数量不能超过 max_new_entities_per_transition。
 - 所有 dc 不能超过 max_runtime_dc。
 - 不允许直接修改 player。
