@@ -23,6 +23,7 @@ META_HINT = frozenset({"hint", "提示", "线索", "建议", "行动"})
 from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.dynamic_world import dynamic_world_phase
 from diceflow.core.models import TurnRecord
+from diceflow.core.npc_autonomy import npc_autonomy_phase, record_autonomy_turn
 from diceflow.core.open_ended_content import open_ended_content_phase
 from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
@@ -57,8 +58,14 @@ class Game:
                 "assessment": {"intent_kind": "transition"},
             }
             self.state.apply_changes(world_changes)
-            narration = narrate(action, check, world_changes, self.state, self.llm)
-            summary = _make_summary(action, check, world_changes)
+            # Light NPC autonomy after scene transition
+            autonomy_changes = npc_autonomy_phase(action, check, world_changes, self.state, self.llm)
+            if autonomy_changes:
+                self.state.apply_changes(autonomy_changes)
+                record_autonomy_turn(self.state, autonomy_changes)
+            merged = merge_state_changes(world_changes, autonomy_changes)
+            narration = narrate(action, check, merged, self.state, self.llm)
+            summary = _make_summary(action, check, merged)
             record = TurnRecord(
                 turn_id=turn_id,
                 player_input=player_input,
@@ -69,7 +76,7 @@ class Game:
                     "fallback_reason": validation.get("reason", ""),
                 },
                 check=check,
-                state_changes=world_changes,
+                state_changes=merged,
                 narration=narration,
                 summary=summary,
             )
@@ -89,7 +96,11 @@ class Game:
             self.state.apply_changes(content_changes)
             reaction_changes = reaction_phase(action, check, changes, self.state)
             self.state.apply_changes(reaction_changes)
-            turn_changes = merge_state_changes(changes, open_ended_changes, content_changes, reaction_changes)
+            autonomy_changes = npc_autonomy_phase(action, check, changes, self.state, self.llm)
+            if autonomy_changes:
+                self.state.apply_changes(autonomy_changes)
+                record_autonomy_turn(self.state, autonomy_changes)
+            turn_changes = merge_state_changes(changes, open_ended_changes, content_changes, reaction_changes, autonomy_changes)
             narration = narrate(action, check, turn_changes, self.state, self.llm)
             summary = _make_summary(action, check, turn_changes)
             dynamic_validation = {
@@ -118,14 +129,23 @@ class Game:
                 ],
             }
             self.state.apply_changes(changes)
+            # Light NPC autonomy: the world doesn't stop when player hesitates
+            autonomy_changes = npc_autonomy_phase(action, None, changes, self.state, self.llm)
+            if autonomy_changes:
+                self.state.apply_changes(autonomy_changes)
+                record_autonomy_turn(self.state, autonomy_changes)
+            merged = merge_state_changes(changes, autonomy_changes)
+            narration_text = str(validation["reason"])
+            if autonomy_changes.get("events"):
+                narration_text += " " + " ".join(str(e) for e in autonomy_changes["events"])
             record = TurnRecord(
                 turn_id=turn_id,
                 player_input=player_input,
                 action=action,
                 validation=validation,
                 check=None,
-                state_changes=changes,
-                narration=str(validation["reason"]),
+                state_changes=merged,
+                narration=narration_text,
                 summary=f"无效行动：{validation['reason']}",
             )
             self.state.record_turn(record.to_dict())
@@ -138,7 +158,11 @@ class Game:
         self.state.apply_changes(content_changes)
         reaction_changes = reaction_phase(action, check, changes, self.state)
         self.state.apply_changes(reaction_changes)
-        turn_changes = merge_state_changes(changes, content_changes, reaction_changes)
+        autonomy_changes = npc_autonomy_phase(action, check, changes, self.state, self.llm)
+        if autonomy_changes:
+            self.state.apply_changes(autonomy_changes)
+            record_autonomy_turn(self.state, autonomy_changes)
+        turn_changes = merge_state_changes(changes, content_changes, reaction_changes, autonomy_changes)
         narration = narrate(action, check, turn_changes, self.state, self.llm)
         summary = _make_summary(action, check, turn_changes)
 

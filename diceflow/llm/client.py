@@ -35,6 +35,7 @@ class LLMClient:
         self.dynamic_content_prompt = (PROMPT_DIR / "dynamic_content_generator.txt").read_text(encoding="utf-8")
         self.dynamic_world_prompt = (PROMPT_DIR / "dynamic_world_generator.txt").read_text(encoding="utf-8")
         self.open_ended_content_prompt = (PROMPT_DIR / "open_ended_content.txt").read_text(encoding="utf-8")
+        self.npc_autonomy_prompt = (PROMPT_DIR / "npc_autonomy.txt").read_text(encoding="utf-8")
 
     def parse_intent(self, player_input: str, state: GameState) -> Action:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
@@ -190,6 +191,35 @@ class LLMClient:
         )
         return json.loads(content)
 
+    def generate_npc_autonomy(
+        self,
+        visible_npcs: dict[str, Any],
+        action: Action,
+        state: GameState,
+    ) -> dict[str, Any]:
+        state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
+        content = self._chat(
+            [
+                {"role": "system", "content": self.npc_autonomy_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "visible_npcs": visible_npcs,
+                            "player_action": action,
+                            "player_hp": state.player.get("hp", 0),
+                            "scene": state.scene,
+                            "recent_events": state.recent_events,
+                            "turn_id": state.turn_id,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
     def _chat(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         response = self.client.chat.completions.create(
             model=self.model,
@@ -231,6 +261,8 @@ def narrate(
 
 def _compact_state(state: GameState) -> dict[str, Any]:
     snapshot = state.get_snapshot()
+    # Keys to strip from compact state to keep prompts lean
+    _strip_keys = {"aliases", "max_hp", "equipped", "hooks", "metadata"}
     return {
         "player": snapshot["player"],
         "scene": {
@@ -244,7 +276,7 @@ def _compact_state(state: GameState) -> dict[str, Any]:
             entity_id: {
                 key: value
                 for key, value in entity.items()
-                if key not in {"aliases", "max_hp"}
+                if key not in _strip_keys
             }
             for entity_id, entity in state.get_visible_entities().items()
         },

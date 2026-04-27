@@ -32,6 +32,12 @@ entities:
     hp: 5
     max_hp: 5
     alive: true
+    favorability: 1
+    disposition: neutral
+    personality:
+      traits: [务实, 谨慎, 观察力敏锐]
+      manner: 平淡但可靠
+      motivation: 经营酒馆多年，见过太多人来人往，不轻易信任陌生人
     tags: [npc, friendly]
     metadata:
       allowed_actions: [talk, inspect]

@@ -162,6 +162,12 @@ dynamic_entity_templates:
     hp: 3
     max_hp: 5
     alive: true
+    favorability: 2
+    disposition: friendly
+    personality:
+      traits: [坚韧, 感恩]
+      manner: 虚弱但友善
+      motivation: 被守卫击伤后躲在此处，希望有人能帮他逃出去
     tags: [npc, dynamic, friendly]
     metadata:
       allowed_actions: [inspect, talk]
@@ -226,6 +232,13 @@ entities:
     - 卫兵
     - 敌人
     - 看守
+    type: npc
+    favorability: -3
+    disposition: hostile
+    personality:
+      traits: [警惕, 职责感强, 寡言]
+      manner: 低沉冷漠
+      motivation: 奉命看守古墓入口，任何闯入者都是敌人
     metadata:
       allowed_actions:
       - attack

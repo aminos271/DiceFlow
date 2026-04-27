@@ -302,3 +302,79 @@ class TestStatusData:
         assert status["hp"] == 10
         assert status["max_hp"] == 10
         assert "短剑" in status["inventory"]
+
+    def test_npc_entity_has_social_data(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        body = resp.json()
+        entities = body["status"]["visible_entities"]
+        guard = next((e for e in entities if e["id"] == "guard_1"), None)
+        assert guard is not None
+        assert guard.get("hostile") is True
+        assert "disposition" in guard
+        assert "favorability" in guard
+        assert "personality" in guard
+
+
+class TestSessionUpdate:
+    def test_update_display_name(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.patch(f"/api/sessions/{sid}", json={"display_name": "我的古墓冒险"})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["display_name"] == "我的古墓冒险"
+
+    def test_update_empty_name(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.patch(f"/api/sessions/{sid}", json={"display_name": "  "})
+        assert resp.status_code == 422
+
+    def test_update_too_long_name(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.patch(f"/api/sessions/{sid}", json={"display_name": "a" * 41})
+        assert resp.status_code == 422
+
+    def test_update_nonexistent_session(self):
+        resp = client.patch("/api/sessions/deadbeef1234", json={"display_name": "test"})
+        assert resp.status_code == 404
+
+    def test_rename_persisted_to_disk(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        client.patch(f"/api/sessions/{sid}", json={"display_name": "改名测试"})
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        raw = json.loads(filepath.read_text(encoding="utf-8"))
+        assert raw["display_name"] == "改名测试"
+
+    def test_default_display_name_from_title(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        body = resp.json()
+        assert body["display_name"] == "古墓入口"
+
+
+class TestSessionDelete:
+    def test_delete_session(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.delete(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+        assert isolated_store.get(sid) is None
+
+    def test_delete_nonexistent_session(self, isolated_store):
+        resp = client.delete("/api/sessions/deadbeef1234")
+        assert resp.status_code == 404
+
+    def test_delete_removes_disk_file(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        assert filepath.exists()
+        client.delete(f"/api/sessions/{sid}")
+        assert not filepath.exists()

@@ -64,6 +64,8 @@ export default function App() {
             onClose={() => setShowHistory(false)}
             onSelect={handleViewSession}
             onNewGame={(sid) => { setShowHistory(false); handleSelectScript(sid, scripts.find(s => s.id === sid)?.title || sid) }}
+            onRefresh={refreshSessions}
+            onDeleteActive={handleBackToSelect}
           />
         )}
       </>

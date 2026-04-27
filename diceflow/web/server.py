@@ -48,10 +48,15 @@ class ScriptInfo(BaseModel):
 class SessionSummary(BaseModel):
     session_id: str
     script_id: str
+    display_name: str = ""
     created_at: str
     updated_at: str
     turn_count: int
     ending: str | None = None
+
+
+class UpdateSessionRequest(BaseModel):
+    display_name: str | None = None
 
 
 class StatusData(BaseModel):
@@ -97,6 +102,7 @@ def create_session(body: CreateSessionRequest) -> dict[str, Any]:
     return {
         "session_id": session.session_id,
         "script_id": session.script_id,
+        "display_name": session.display_name,
         "created_at": session.created_at,
     }
 
@@ -114,6 +120,29 @@ def get_session(session_id: str) -> dict[str, Any]:
     d = session.to_dict()
     d["status"] = _build_status(session)
     return d
+
+
+@app.patch("/api/sessions/{session_id}")
+def update_session(session_id: str, body: UpdateSessionRequest) -> dict[str, Any]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    if body.display_name is not None:
+        name = body.display_name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="display_name must not be empty")
+        if len(name) > 40:
+            raise HTTPException(status_code=422, detail="display_name must be at most 40 characters")
+        session.display_name = name
+        store.save_to_disk(session)
+    return {"session_id": session.session_id, "display_name": session.display_name}
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: str) -> dict[str, str]:
+    if not store.delete(session_id):
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    return {"status": "deleted", "session_id": session_id}
 
 
 @app.post("/api/sessions/{session_id}/turns")
@@ -196,6 +225,18 @@ def _build_status(session) -> StatusData:
             info["opened"] = True
         if ent.get("destroyed"):
             info["destroyed"] = True
+        if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
+            info["disposition"] = ent.get("disposition", "neutral")
+            info["favorability"] = ent.get("favorability", 0)
+            personality = ent.get("personality")
+            if isinstance(personality, dict):
+                info["personality"] = {
+                    "traits": personality.get("traits", []),
+                    "manner": personality.get("manner", ""),
+                    "motivation": personality.get("motivation", ""),
+                }
+            elif isinstance(personality, str):
+                info["personality"] = {"traits": [], "manner": personality, "motivation": ""}
         entity_list.append(info)
 
     return StatusData(

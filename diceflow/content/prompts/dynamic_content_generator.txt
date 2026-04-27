@@ -50,7 +50,7 @@
 - set_flag 的 key 必须以 generated. 开头。
 - 新实体 ID 不能和已有实体 ID 冲突，建议使用 dyn_ 前缀。
 - 实体 type 必须来自 allowed_entity_types。
-- 如果生成 npc 类型：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy。
+- 如果生成 npc 类型：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy、必须包含 favorability（-5到5）、disposition（friendly/neutral/suspicious/hostile）、personality（traits/manner/motivation）。
 - 如果生成 pickup 类型：只是可拾取的小物品，不可为神器或通关关键物。
 - 不允许直接修改 player。
 - 不允许直接伤害玩家。

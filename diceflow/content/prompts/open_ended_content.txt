@@ -68,7 +68,7 @@ result_quality 决定生成内容的倾向：
 - set_flag 的 key 必须以 runtime. 或 generated. 开头。
 - 新实体 ID 不能和 existing_entity_ids 冲突，必须使用 dyn_ 前缀。
 - 实体 type 必须来自 allowed_entity_types。
-- 如果生成 npc 类型：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy。
+- 如果生成 npc 类型：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy、必须包含 favorability（-5到5）、disposition（friendly/neutral/suspicious/hostile）、personality（traits/manner/motivation）。
 - 如果生成 pickup 类型：只是可拾取的小物品，不可为神器、通关关键物或军事级武器。
 - entity action 的 dc 不能超过 max_dc。
 - 不允许直接修改 player。
@@ -104,6 +104,9 @@ max_dc: 14
         "tags": ["npc", "dynamic", "friendly"],
         "hp": 4,
         "max_hp": 4,
+        "favorability": 3,
+        "disposition": "friendly",
+        "personality": {"traits": ["沉稳", "老练"], "manner": "低调可靠", "motivation": "退休后想找点有意义的事做"},
         "metadata": {
           "allowed_actions": ["inspect", "talk"],
           "actions": {
@@ -155,6 +158,9 @@ max_dc: 14
         "tags": ["npc", "dynamic"],
         "hp": 3,
         "max_hp": 3,
+        "favorability": 0,
+        "disposition": "neutral",
+        "personality": {"traits": ["多嘴", "不可靠"], "manner": "醉醺醺", "motivation": "想找人听他吹嘘跑商经历"},
         "metadata": {
           "allowed_actions": ["inspect", "talk"],
           "actions": {

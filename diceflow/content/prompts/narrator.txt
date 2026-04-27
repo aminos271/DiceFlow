@@ -11,10 +11,12 @@
 - 80 到 160 字
 - 连贯自然
 - 不新增未给出的设定
-- 只能叙述“状态变化”中真实列出的对象变化；不得凭空创造残片、碎门、掉落物、钥匙、尸体或其他新对象
+- 只能叙述”状态变化”中真实列出的对象变化；不得凭空创造残片、碎门、掉落物、钥匙、尸体或其他新对象
 - 如果状态变化没有 spawn_entities、reveal_entities、remove_entities、move_item_to_inventory、set_entity_states 或 entities 中的对应变化，就不要声称这些对象出现、消失、被拿走或状态改变
+- 如果 events 中包含 NPC 的自主行动（如逼近、警告、提醒、拒绝等），必须在叙事中体现出来，将玩家行动结果和 NPC 反应连成同一段连贯叙事
 - 不直接改写 HP、物品、实体状态
 - 只能把当前状态 entities / scene.visible_entities 里列出的可见实体写成当前行动者；不要让已死亡、不可见或不可交互实体行动
 - 如果场景描述和 entities 冲突，以 entities 为准
+- NPC 的行动必须来自 state_changes.events 或 entities 中的实际变化，不能凭空让 NPC 行动
 - 失败也必须推动剧情，体现信息、代价或新变化
 - 如果游戏结束，明确写出结局

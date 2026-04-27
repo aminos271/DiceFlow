@@ -44,3 +44,16 @@ export function runMeta(sessionId, command) {
     body: JSON.stringify({ command }),
   })
 }
+
+export function updateSession(sessionId, displayName) {
+  return request(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ display_name: displayName }),
+  })
+}
+
+export function deleteSession(sessionId) {
+  return request(`/sessions/${sessionId}`, {
+    method: 'DELETE',
+  })
+}

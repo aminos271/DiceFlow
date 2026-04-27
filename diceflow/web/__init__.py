@@ -21,11 +21,13 @@ class Session:
     updated_at: str
     game: Game = field(repr=False)
     turn_history: list[dict[str, Any]] = field(default_factory=list)
+    display_name: str = ""
 
     def to_summary(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
             "script_id": self.script_id,
+            "display_name": self.display_name or self.script_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "turn_count": len(self.turn_history),
@@ -36,6 +38,7 @@ class Session:
         return {
             "session_id": self.session_id,
             "script_id": self.script_id,
+            "display_name": self.display_name or self.script_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "snapshot": self.game.state.get_snapshot(),
@@ -59,9 +62,11 @@ class SessionStore:
         session_id = uuid.uuid4().hex[:12]
         now = _now_iso()
         game = Game(script=load_script(script_id), use_llm=use_llm)
+        script_title = str(game.script.get("title") or script_id)
         session = Session(
             session_id=session_id,
             script_id=script_id,
+            display_name=script_title,
             created_at=now,
             updated_at=now,
             game=game,
@@ -78,11 +83,23 @@ class SessionStore:
         summaries.sort(key=lambda s: s["updated_at"], reverse=True)
         return summaries
 
+    def delete(self, session_id: str) -> bool:
+        if session_id not in self.sessions:
+            return False
+        del self.sessions[session_id]
+        filepath = self.data_dir / f"{session_id}.json"
+        try:
+            filepath.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+
     def save_to_disk(self, session: Session) -> None:
         session.updated_at = _now_iso()
         record = {
             "session_id": session.session_id,
             "script_id": session.script_id,
+            "display_name": session.display_name or session.script_id,
             "created_at": session.created_at,
             "updated_at": session.updated_at,
             "turn_history": session.turn_history,
@@ -102,9 +119,11 @@ class SessionStore:
             sid = record.get("session_id")
             if not sid or sid in self.sessions:
                 continue
+            display_name = record.get("display_name") or record.get("script_id", "unknown")
             session = Session(
                 session_id=sid,
                 script_id=record.get("script_id", "unknown"),
+                display_name=display_name,
                 created_at=record.get("created_at", ""),
                 updated_at=record.get("updated_at", ""),
                 game=_make_stub_game(record.get("script_id", "tomb_entrance")),

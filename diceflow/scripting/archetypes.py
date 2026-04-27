@@ -26,6 +26,11 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
         "location": "",
         "favorability": 0,
         "disposition": "neutral",
+        "personality": {
+            "traits": [],
+            "manner": "",
+            "motivation": "",
+        },
         "inventory": [],
         "equipped": {},
         "attributes": {
