@@ -107,3 +107,12 @@ PYTHONPATH=. pytest tests/test_web_api.py -v
 - **LLM**：DeepSeek API（兼容 OpenAI SDK）
 - **数据**：YAML 剧本、JSON 会话持久化
 - **测试**：pytest + FastAPI TestClient
+
+
+## 示例
+
+剧本选择
+![alt text](./示例/剧本选择.png)
+
+游玩时
+![alt text](./示例/游玩.png)
