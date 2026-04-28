@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from diceflow.app.game import Game
@@ -62,7 +63,7 @@ class IntentParserTest(unittest.TestCase):
             def parse_intent(self, player_input, state):
                 self.calls += 1
                 if self.calls == 1:
-                    raise RuntimeError("temporary")
+                    raise json.JSONDecodeError("temporary", "", 0)
                 return {
                     "intent_family": "wait",
                     "target": "",

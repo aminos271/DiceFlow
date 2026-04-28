@@ -160,7 +160,9 @@ class ScriptLoadingTest(unittest.TestCase):
     def test_action_spec_prefers_target_entity_action(self) -> None:
         game = Game(script=load_script("tomb_entrance"), use_llm=False)
         action = {"type": "inspect", "target": "左门", "method": "", "tool": ""}
-        self.assertTrue(validate(action, game.state)["valid"])
+        result = validate(action, game.state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
 
         action_spec = get_action_spec(action, game.state)
 
@@ -176,7 +178,9 @@ class ScriptLoadingTest(unittest.TestCase):
             "tool": "铁钥匙",
             "method_text": "用铁钥匙开铁门",
         }
-        self.assertTrue(validate(action, game.state)["valid"])
+        result = validate(action, game.state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
 
         action_spec = resolve_action_spec(action, game.state)
 
@@ -190,7 +194,9 @@ class ScriptLoadingTest(unittest.TestCase):
     def test_action_spec_uses_scene_action_without_target(self) -> None:
         game = Game(script=load_script("tomb_entrance"), use_llm=False)
         action = {"type": "wait", "target": "", "method": "", "tool": ""}
-        self.assertTrue(validate(action, game.state)["valid"])
+        result = validate(action, game.state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
 
         action_spec = get_action_spec(action, game.state)
 

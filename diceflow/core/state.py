@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any
 
@@ -11,6 +12,7 @@ from diceflow.core.lifecycle import (
     mark_removed_entity,
     prepare_spawned_entity,
 )
+from diceflow.core.matching import match_entity_name
 from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
 from diceflow.core.utils import dedupe_preserving_order
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
@@ -120,15 +122,12 @@ class GameState:
         if normalized in self.entities and self.is_interactable_entity(normalized):
             return normalized
 
-        for entity_id, entity in self.entities.items():
-            if not self.is_interactable_entity(entity_id):
-                continue
-            names = [entity.get("name", ""), *entity.get("aliases", [])]
-            if normalized in names:
-                return entity_id
-            if any(normalized and normalized in name for name in names):
-                return entity_id
-        return None
+        candidates = {
+            entity_id: [str(entity.get("name", "")), *[str(a) for a in entity.get("aliases", [])]]
+            for entity_id, entity in self.entities.items()
+            if self.is_interactable_entity(entity_id)
+        }
+        return match_entity_name(normalized, candidates)
 
     def is_interactable_entity(self, entity_id: str) -> bool:
         entity = self.entities.get(entity_id)
@@ -149,7 +148,12 @@ class GameState:
     def apply_changes(self, changes: dict[str, Any]) -> None:
         if not changes:
             return
-        self.apply_script_patch(changes.get("runtime_script_patch"))
+        try:
+            self.apply_script_patch(changes.get("runtime_script_patch"))
+        except (ValueError, KeyError, TypeError) as exc:
+            logging.getLogger(__name__).error(
+                "apply_script_patch failed (turn %d): %s", self.turn_id, exc, exc_info=True
+            )
 
         player_changes = changes.get("player", {})
         self._apply_object_changes(self.player, player_changes)

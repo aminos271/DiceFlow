@@ -11,10 +11,21 @@ from diceflow.core.utils import traverse_replace
 PRONOUN_POSSESSIVES = ("他的", "她的", "它的", "其")
 
 
-def resolve_implied_entity(action: Action, state: Any) -> str:
+def resolve_implied_entity(action: Action, state: Any) -> tuple[str, StateChanges | None]:
+    """Resolve an implied target from the action text and entity implied specs.
+
+    Returns ``(entity_id, spawn_changes)``.
+    - ``entity_id``: the resolved target id (empty string if not found).
+    - ``spawn_changes``: changes to apply when a new implied entity was spawned
+      (``None`` if no new entity was created).
+
+    This function is **read-only** — it does not mutate the state parameter.
+    The caller is responsible for applying ``spawn_changes`` to the game state
+    via ``state.apply_changes()``.
+    """
     target_text = str(action.get("target") or "").strip()
     if not target_text:
-        return ""
+        return "", None
 
     for source_id, source in state.entities.items():
         if not state.is_interactable_entity(source_id):
@@ -37,15 +48,14 @@ def resolve_implied_entity(action: Action, state: Any) -> str:
                 continue
             existing_id = state.find_entity_id(entity_id) or state.find_entity_id(str(entity.get("name") or ""))
             if existing_id:
-                return existing_id
+                return existing_id, None
 
             entity["_origin_kind"] = "derived"
             entity["_source_action"] = action_family(action)
             entity["_source_entity_id"] = source_id
             entity["_rule_id"] = f"implied:{_implied_kind(implied)}"
-            state.apply_changes({"spawn_entities": {entity_id: entity}})
-            return entity_id
-    return ""
+            return entity_id, {"spawn_entities": {entity_id: entity}}
+    return "", None
 
 
 def _iter_implied_specs(source: dict[str, Any], target_text: str, state: Any) -> list[Any]:

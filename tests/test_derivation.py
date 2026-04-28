@@ -81,7 +81,7 @@ class DerivationTest(unittest.TestCase):
         result = validate(action, self.state)
 
         self.assertTrue(result["valid"])
-        self.assertEqual(action["target_id"], "skeleton_1_shield")
+        self.assertEqual(result["_normalized_action"]["target_id"], "skeleton_1_shield")
         self.assertIn("skeleton_1_shield", self.state.entities)
         shield = self.state.entities["skeleton_1_shield"]
         self.assertEqual(shield["lifecycle"]["origin"]["kind"], "derived")
@@ -104,7 +104,7 @@ class DerivationTest(unittest.TestCase):
         result = validate(action, self.state)
 
         self.assertTrue(result["valid"])
-        self.assertEqual(action["target_id"], "skeleton_1_shield")
+        self.assertEqual(result["_normalized_action"]["target_id"], "skeleton_1_shield")
 
     def test_chinese_possessive_target_resolves_script_implied_equipment(self) -> None:
         state = GameState(load_script("tomb_entrance"))
@@ -132,7 +132,7 @@ class DerivationTest(unittest.TestCase):
         result = validate(action, state)
 
         self.assertTrue(result["valid"])
-        self.assertEqual(action["target_id"], "guard_1_shield")
+        self.assertEqual(result["_normalized_action"]["target_id"], "guard_1_shield")
         self.assertIn("guard_1_shield", state.entities)
         shield = state.entities["guard_1_shield"]
         self.assertEqual(shield["name"], "盾牌")

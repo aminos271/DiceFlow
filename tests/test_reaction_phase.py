@@ -11,7 +11,9 @@ class ReactionPhaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
         self.attack_guard = {"type": "attack", "target": "守卫", "method": "", "tool": ""}
-        self.assertTrue(validate(self.attack_guard, self.game.state)["valid"])
+        result = validate(self.attack_guard, self.game.state)
+        self.assertTrue(result["valid"])
+        self.attack_guard = result.get("_normalized_action", self.attack_guard)
 
     def test_hostile_target_reacts_after_successful_attack(self) -> None:
         action_changes = update_state(self.attack_guard, {"result": "success"}, self.game.state)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from typing import Any
 
@@ -47,6 +48,8 @@ class Game:
         turn_id = self.state.advance_turn()
         action = parse_intent(player_input, self.state, self.llm)
         validation = validate(action, self.state)
+        action = validation.pop("_normalized_action", action)
+        validation.pop("_implied_spawn_applied", None)  # consumed by validate()
 
         world_changes = dynamic_world_phase(action, validation, self.state, self.llm)
         if world_changes:
@@ -89,7 +92,7 @@ class Game:
             changes = self.adjudicator.update_state(action, check, self.state)
             open_ended_changes = open_ended_content_phase(action, check, changes, self.state, self.llm)
             if open_ended_changes:
-                changes = _suppress_open_ended_fallback_spawn(changes, check)
+                changes = _suppress_open_ended_fallback_spawn(changes, check, turn_id)
             self.state.apply_changes(changes)
             self.state.apply_changes(open_ended_changes)
             content_changes = runtime_content_phase(action, check, changes, self.state, self.llm)
@@ -183,6 +186,7 @@ class Game:
         try:
             return LLMClient()
         except Exception:
+            logging.getLogger(__name__).warning("LLMClient init failed; falling back to no-LLM mode", exc_info=True)
             return None
 
 
@@ -254,16 +258,44 @@ def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[s
     return f"{action_type} {target} -> {result}。{event}"
 
 
-def _suppress_open_ended_fallback_spawn(changes: dict[str, Any], check: dict[str, Any]) -> dict[str, Any]:
-    """Drop generic discover/environment fallback spawns when LLM content fills the result."""
+def _suppress_open_ended_fallback_spawn(changes: dict[str, Any], check: dict[str, Any], turn_id: int) -> dict[str, Any]:
+    """Remove the adjudicator's generic fallback spawn when LLM open-ended content
+    has already filled the result with richer output.
+
+    Only removes the spawn entries and runtime_script_patch that were created by
+    ``_resolve_dynamic_spawn_from_script`` / ``_runtime_patch_for_spawn`` inside
+    the adjudicator.  Any spawns or patches from other sources (LLM assessment,
+    runtime generation) are left untouched.
+    """
     assessment = check.get("assessment", {})
     intent_kind = str(assessment.get("intent_kind") or "") if isinstance(assessment, dict) else ""
     if intent_kind not in {"discover", "create_environment"} or "spawn_entities" not in changes:
         return changes
 
-    filtered = dict(changes)
-    filtered.pop("spawn_entities", None)
-    filtered.pop("runtime_script_patch", None)
+    fallback_patch_id = f"dynamic_spawn_turn_{turn_id}"
+    patch = changes.get("runtime_script_patch")
+    if isinstance(patch, dict) and patch.get("id") == fallback_patch_id:
+        filtered = dict(changes)
+        filtered.pop("runtime_script_patch", None)
+    else:
+        filtered = dict(changes)
+
+    # The adjudicator's fallback spawn entities have two possible naming patterns:
+    # 1. _resolve_dynamic_spawn_from_script creates: "dynamic_{kind}_{turn}" (e.g. dynamic_discover_5)
+    # 2. _sanitize_spawn_spec wraps it as: "dynamic_dynamic_{kind}_{turn}"
+    # We remove both, but keep any LLM-provided spawns (which have custom entity ids).
+    fallback_suffix = f"{intent_kind}_{turn_id}"
+    spawn = filtered.get("spawn_entities")
+    if isinstance(spawn, dict):
+        kept = {
+            k: v for k, v in spawn.items()
+            if not (str(k) == f"dynamic_{fallback_suffix}" or str(k) == f"dynamic_dynamic_{fallback_suffix}")
+        }
+        if kept:
+            filtered["spawn_entities"] = kept
+        else:
+            filtered.pop("spawn_entities", None)
+
     return filtered
 
 

@@ -93,10 +93,29 @@ def _entity_mentions(text: str, state: GameState | None) -> list[dict[str, str]]
         for name in sorted(set(names), key=len, reverse=True):
             _append_mention(mentions, text, name, str(entity.get("name") or entity_id), entity_id)
 
-    mentions.sort(key=lambda match: (int(match["start"]), -int(match["length"])))
+    # Drop subsumed matches: a short alias contained inside a longer match
+    # in the same text region belongs to the longer entity name.
+    # e.g. "门" at pos 3 inside "木门" at pos 2 is discarded.
+    mentions.sort(key=lambda m: (int(m["start"]), -int(m["length"])))
+    filtered: list[dict[str, str | int]] = []
+    for i, match in enumerate(mentions):
+        start_i = int(match["start"])
+        end_i = start_i + int(match["length"])
+        subsumed = False
+        for j, other in enumerate(mentions):
+            if i == j:
+                continue
+            start_j = int(other["start"])
+            end_j = start_j + int(other["length"])
+            if start_j <= start_i and end_j >= end_i and int(other["length"]) > int(match["length"]):
+                subsumed = True
+                break
+        if not subsumed:
+            filtered.append(match)
+
     deduped: list[dict[str, str]] = []
     seen_ids: set[str] = set()
-    for match in mentions:
+    for match in filtered:
         match_id = str(match["id"])
         if match_id in seen_ids:
             continue

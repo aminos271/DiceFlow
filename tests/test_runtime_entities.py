@@ -13,7 +13,9 @@ class RuntimeEntitiesTest(unittest.TestCase):
 
     def test_open_chest_reveals_real_key_then_take_moves_it_to_inventory(self) -> None:
         open_chest = {"type": "open", "target": "木箱", "method": "", "tool": ""}
-        self.assertTrue(validate(open_chest, self.game.state)["valid"])
+        result = validate(open_chest, self.game.state)
+        self.assertTrue(result["valid"])
+        open_chest = result.get("_normalized_action", open_chest)
 
         open_changes = update_state(open_chest, {"result": "success"}, self.game.state)
         self.game.state.apply_changes(open_changes)
@@ -30,7 +32,9 @@ class RuntimeEntitiesTest(unittest.TestCase):
         self.assertIn("已经打开", reopen_result["reason"])
 
         take_key = {"type": "take", "target": "铁钥匙", "method": "", "tool": ""}
-        self.assertTrue(validate(take_key, self.game.state)["valid"])
+        result = validate(take_key, self.game.state)
+        self.assertTrue(result["valid"])
+        take_key = result.get("_normalized_action", take_key)
 
         take_changes = update_state(take_key, {"result": "success"}, self.game.state)
         self.game.state.apply_changes(take_changes)
@@ -53,7 +57,9 @@ class RuntimeEntitiesTest(unittest.TestCase):
             "tool": "木箱",
             "method": "用木箱砸骷髅",
         }
-        self.assertTrue(validate(smash, self.game.state)["valid"])
+        result = validate(smash, self.game.state)
+        self.assertTrue(result["valid"])
+        smash = result.get("_normalized_action", smash)
         action_spec = resolve_action_spec(smash, self.game.state)
         self.assertEqual(action_spec["scope"], "generic_rule")
 
@@ -72,7 +78,9 @@ class RuntimeEntitiesTest(unittest.TestCase):
             "method": "拿起铁钥匙",
             "tool": "",
         }
-        self.assertTrue(validate(take_revealed_key, self.game.state)["valid"])
+        result = validate(take_revealed_key, self.game.state)
+        self.assertTrue(result["valid"])
+        take_revealed_key = result.get("_normalized_action", take_revealed_key)
 
         take_changes = update_state(take_revealed_key, {"result": "success"}, self.game.state)
         self.game.state.apply_changes(take_changes)
@@ -88,7 +96,9 @@ class RuntimeEntitiesTest(unittest.TestCase):
             "tool": "木箱",
             "method": "投掷木箱砸骷髅",
         }
-        self.assertTrue(validate(throw, self.game.state)["valid"])
+        result = validate(throw, self.game.state)
+        self.assertTrue(result["valid"])
+        throw = result.get("_normalized_action", throw)
 
         action_spec = resolve_action_spec(throw, self.game.state)
 

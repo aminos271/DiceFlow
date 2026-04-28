@@ -10,7 +10,9 @@ class UpdaterOutcomesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.game = Game(script=load_script("tomb_entrance"), use_llm=False)
         self.attack_guard = {"type": "attack", "target": "守卫", "method": "", "tool": ""}
-        self.assertTrue(validate(self.attack_guard, self.game.state)["valid"])
+        result = validate(self.attack_guard, self.game.state)
+        self.assertTrue(result["valid"])
+        self.attack_guard = result.get("_normalized_action", self.attack_guard)
 
     def test_success_maps_to_configured_changes(self) -> None:
         changes = update_state(self.attack_guard, {"result": "success"}, self.game.state)

@@ -55,7 +55,9 @@ class EntityArchetypesTest(unittest.TestCase):
         self.assertEqual(ring["effects"], [{"kind": "social_hint", "value": 1}])
 
         action = {"type": "take", "target": "戒指", "method": "拿起戒指", "tool": ""}
-        self.assertTrue(validate(action, state)["valid"])
+        result = validate(action, state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
         self.assertEqual(action["target_id"], "silver_ring")
 
         changes = update_state(action, {"result": "success"}, state)

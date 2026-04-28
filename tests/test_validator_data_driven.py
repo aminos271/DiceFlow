@@ -15,7 +15,7 @@ class ValidatorDataDrivenTest(unittest.TestCase):
         result = validate(action, self.game.state)
 
         self.assertTrue(result["valid"])
-        self.assertEqual(action["target_id"], "guard_1")
+        self.assertEqual(result["_normalized_action"]["target_id"], "guard_1")
 
     def test_left_door_does_not_allow_attack(self) -> None:
         action = {"type": "attack", "target": "左门", "method": "", "tool": ""}
@@ -72,8 +72,8 @@ class ValidatorDataDrivenTest(unittest.TestCase):
         result = validate(action, game.state)
 
         self.assertTrue(result["valid"])
-        self.assertEqual(action["target_id"], "iron_door")
-        self.assertEqual(action["tool_id"], "铁钥匙")
+        self.assertEqual(result["_normalized_action"]["target_id"], "iron_door")
+        self.assertEqual(result["_normalized_action"]["tool_id"], "铁钥匙")
 
     def test_use_requires_matching_tool_id(self) -> None:
         game = Game(script=load_script("dungeon_corridor"), use_llm=False)

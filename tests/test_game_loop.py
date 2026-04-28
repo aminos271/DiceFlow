@@ -81,7 +81,9 @@ class GameLoopTest(unittest.TestCase):
         game = Game(script=load_script("tomb_entrance"), use_llm=False)
         game.state.apply_changes({"entities": {"guard_1": {"hp_delta": -6}}})
         action = {"type": "open", "target": "左门", "method": "", "tool": ""}
-        self.assertTrue(validate(action, game.state)["valid"])
+        result = validate(action, game.state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
 
         changes = update_state(action, {"result": "success", "dc": 14, "roll": 14}, game.state)
 
@@ -123,7 +125,9 @@ class GameLoopTest(unittest.TestCase):
             "method": "\u641c\u522e\u5b88\u536b\u7684\u5c38\u4f53\uff0c\u5c1d\u8bd5\u627e\u94a5\u5319",
             "tool": "",
         }
-        self.assertTrue(validate(loot_corpse, game.state)["valid"])
+        result = validate(loot_corpse, game.state)
+        self.assertTrue(result["valid"])
+        loot_corpse = result.get("_normalized_action", loot_corpse)
         self.assertEqual(loot_corpse["target_id"], "guard_1_corpse")
 
         changes = update_state(loot_corpse, {"result": "success"}, game.state)
@@ -138,7 +142,9 @@ class GameLoopTest(unittest.TestCase):
             "method": "\u62ff\u8d77\u5b88\u536b\u7684\u76fe\u724c",
             "tool": "",
         }
-        self.assertTrue(validate(take_shield, game.state)["valid"])
+        result = validate(take_shield, game.state)
+        self.assertTrue(result["valid"])
+        take_shield = result.get("_normalized_action", take_shield)
         self.assertEqual(take_shield["target_id"], "guard_1_shield")
 
         shield_changes = update_state(take_shield, {"result": "success"}, game.state)

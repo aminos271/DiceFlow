@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from openai import APIError, APIConnectionError, OpenAI
 
 from diceflow import config
 from diceflow.core.dynamic_world import _world_contract
@@ -232,11 +233,16 @@ class LLMClient:
 
 def parse_intent(player_input: str, state: GameState, llm: LLMClient | None = None) -> Action:
     if llm:
-        for _ in range(LLM_RETRY_ATTEMPTS):
+        for attempt in range(LLM_RETRY_ATTEMPTS):
             try:
                 return llm.parse_intent(player_input, state)
-            except Exception:
-                pass
+            except (json.JSONDecodeError, APIError, APIConnectionError, AttributeError):
+                logging.getLogger(__name__).warning(
+                    "parse_intent LLM attempt %d/%d failed",
+                    attempt + 1,
+                    LLM_RETRY_ATTEMPTS,
+                    exc_info=True,
+                )
     return heuristic_parse_intent(player_input, state)
 
 
@@ -248,13 +254,18 @@ def narrate(
     llm: LLMClient | None = None,
 ) -> str:
     if llm:
-        for _ in range(LLM_RETRY_ATTEMPTS):
+        for attempt in range(LLM_RETRY_ATTEMPTS):
             try:
                 text = llm.narrate(action, check, changes, state)
                 if text:
                     return text
-            except Exception:
-                pass
+            except (APIError, APIConnectionError, AttributeError):
+                logging.getLogger(__name__).warning(
+                    "narrate LLM attempt %d/%d failed",
+                    attempt + 1,
+                    LLM_RETRY_ATTEMPTS,
+                    exc_info=True,
+                )
     return fallback_narration(action, check, changes, state)
 
 
