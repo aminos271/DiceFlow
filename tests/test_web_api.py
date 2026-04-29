@@ -298,6 +298,7 @@ class TestStatusData:
         assert "scene_name" in status
         assert "scene_description" in status
         assert "visible_entities" in status
+        assert "known_entities" in status
         assert "hints" in status
         assert status["hp"] == 10
         assert status["max_hp"] == 10
@@ -315,6 +316,97 @@ class TestStatusData:
         assert "disposition" in guard
         assert "favorability" in guard
         assert "personality" in guard
+
+
+class TestKnownEntities:
+    def test_hidden_entity_not_in_known_entities(self, isolated_store):
+        """Hidden entities never discovered must not leak via known_entities."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        hidden_ids = {e["id"] for e in known}
+        # guard_1_shield starts hidden and should NOT be known
+        assert "guard_1_shield" not in hidden_ids, (
+            "guard_1_shield is hidden at start and must not leak"
+        )
+
+    def test_visible_entity_in_known_entities(self, isolated_store):
+        """Currently visible entities must appear in known_entities."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        guard = next((e for e in known if e["id"] == "guard_1"), None)
+        assert guard is not None, "guard_1 is visible and must be in known_entities"
+        assert guard["is_visible"] is True
+
+    def test_inventory_items_in_known_entities(self, isolated_store):
+        """Items in player inventory must appear in known_entities."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        inventory_ents = [e for e in known if e["is_in_inventory"]]
+        assert len(inventory_ents) >= 1
+        short_sword = next((e for e in inventory_ents if e["name"] == "短剑"), None)
+        assert short_sword is not None
+        assert short_sword["type"] == "item"
+
+    def test_npc_in_known_entities_has_social_data(self, isolated_store):
+        """NPC entities must carry social fields in known_entities."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        guard = next((e for e in known if e["id"] == "guard_1"), None)
+        assert guard is not None
+        assert guard.get("hostile") is True
+        assert "disposition" in guard
+        assert "favorability" in guard
+
+    def test_known_entities_has_required_fields(self, isolated_store):
+        """Every known_entities record must carry the canonical shape."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        assert len(known) > 0
+        for ent in known:
+            for field in ["id", "name", "type", "tags", "is_visible",
+                          "is_in_inventory", "hostile", "locked", "opened",
+                          "destroyed", "looted", "alive", "available",
+                          "last_seen_turn_id"]:
+                assert field in ent, f"Missing field '{field}' in entity {ent['id']}"
+
+    def test_revealed_entity_appears_in_known_entities(self, isolated_store):
+        """After an action reveals a hidden entity, it must show up."""
+        data = _create_session(isolated_store, script_id="dungeon_corridor")
+        sid = data["session_id"]
+
+        # iron_key starts hidden — verify it is NOT known yet
+        resp = client.get(f"/api/sessions/{sid}")
+        known_ids = {e["id"] for e in resp.json()["status"]["known_entities"]}
+        assert "iron_key" not in known_ids, "iron_key is hidden at start"
+
+        # Open the chest to reveal iron_key
+        resp = client.post(f"/api/sessions/{sid}/turns", json={"input": "打开木箱"})
+        assert resp.status_code == 200, resp.text
+        known = resp.json()["status"]["known_entities"]
+        key = next((e for e in known if e["id"] == "iron_key"), None)
+        assert key is not None, "iron_key must appear in known_entities after being revealed"
+        assert key["name"] == "铁钥匙"
+
+    def test_visible_count_matches_expected(self, isolated_store):
+        """Sanity: known_entities visible subset == visible_entities count."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        body = resp.json()
+        known = body["status"]["known_entities"]
+        visible = body["status"]["visible_entities"]
+        known_visible = [e for e in known if e["is_visible"]]
+        assert len(known_visible) == len(visible)
 
 
 class TestSessionUpdate:

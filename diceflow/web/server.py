@@ -67,6 +67,7 @@ class StatusData(BaseModel):
     scene_name: str
     scene_description: str
     visible_entities: list[dict[str, Any]]
+    known_entities: list[dict[str, Any]]
     hostile_count: int
     hints: list[str]
     is_game_over: bool = False
@@ -205,6 +206,166 @@ def health() -> dict[str, str]:
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
+def _build_known_entities(session) -> list[dict[str, Any]]:
+    """Build a record of entities the player knows about.
+
+    "Known" means the player has seen, picked up, or otherwise interacted
+    with the entity.  Hidden entities that have never been revealed are
+    intentionally excluded to avoid leaking script secrets.
+
+    Sources (in priority order):
+      1. Currently visible entities (get_visible_entities)
+      2. Items in player inventory
+      3. Entities recorded in entity_journal (removed / expired)
+      4. Non-visible entities whose lifecycle shows evidence of prior
+         interaction (updated_turn_id, looted, destroyed, phase changes)
+    """
+    state = session.game.state
+    inventory_names = set(state.get_inventory_items())
+    visible = state.get_visible_entities()
+
+    # ── Determine which entity IDs are known ──────────────────────
+    known_ids: set[str] = set()
+
+    # 1. Currently visible entities are always known
+    known_ids.update(visible.keys())
+
+    # 2. Entities referenced in entity_journal (removed / TTL-expired)
+    journal_by_entity: dict[str, dict[str, Any]] = {}
+    for je in state.entity_journal:
+        eid = je.get("entity_id")
+        if eid:
+            journal_by_entity[eid] = je
+            known_ids.add(eid)
+
+    # 3. Non-visible entities with evidence of prior interaction
+    for eid, ent in state.entities.items():
+        if eid in known_ids:
+            continue
+        name = str(ent.get("name", eid))
+        # In player inventory
+        if name in inventory_names:
+            known_ids.add(eid)
+            continue
+        # Looted / moved to inventory phase
+        if ent.get("looted") or ent.get("lifecycle", {}).get("phase") == "inventory":
+            known_ids.add(eid)
+            continue
+        # Destroyed — the player must have interacted with it
+        if ent.get("destroyed"):
+            known_ids.add(eid)
+            continue
+        # Lifecycle updated_turn_id indicates the entity's state was
+        # touched by a game action (reveal, hide, damage, etc.)
+        updated_turn = ent.get("lifecycle", {}).get("updated_turn_id")
+        if updated_turn is not None and updated_turn > 0:
+            known_ids.add(eid)
+            continue
+
+    # ── Build records ─────────────────────────────────────────────
+    records: list[dict[str, Any]] = []
+    recorded_names: set[str] = set()
+
+    for eid in known_ids:
+        ent = state.entities.get(eid)
+        if ent is None:
+            # Entity was removed — rebuild minimal record from journal
+            je = journal_by_entity.get(eid)
+            if not je:
+                continue
+            lifecycle = je.get("lifecycle", {}) if isinstance(je.get("lifecycle"), dict) else {}
+            name = str(je.get("name", eid))
+            in_inv = lifecycle.get("phase") == "inventory" or name in inventory_names
+            records.append({
+                "id": eid,
+                "name": name,
+                "type": "",
+                "tags": [],
+                "is_visible": False,
+                "is_in_inventory": in_inv,
+                "hostile": False,
+                "locked": False,
+                "opened": False,
+                "destroyed": lifecycle.get("phase") == "destroyed",
+                "looted": lifecycle.get("phase") == "inventory",
+                "alive": lifecycle.get("phase") not in ("destroyed", "removed"),
+                "available": False,
+                "last_seen_turn_id": je.get("turn_id"),
+            })
+            recorded_names.add(name)
+            continue
+
+        # Active entity in state.entities
+        name = str(ent.get("name", eid))
+        is_vis = eid in visible
+        in_inv = name in inventory_names or ent.get("lifecycle", {}).get("phase") == "inventory"
+
+        if is_vis:
+            last_seen = state.turn_id
+        else:
+            je = journal_by_entity.get(eid)
+            if je:
+                last_seen = je.get("turn_id")
+            else:
+                last_seen = ent.get("lifecycle", {}).get("updated_turn_id")
+
+        record: dict[str, Any] = {
+            "id": eid,
+            "name": name,
+            "type": ent.get("type", ""),
+            "tags": ent.get("tags", []),
+            "is_visible": is_vis,
+            "is_in_inventory": in_inv,
+            "hostile": bool(ent.get("hostile") or "hostile" in ent.get("tags", [])),
+            "locked": bool(ent.get("locked")),
+            "opened": bool(ent.get("opened")),
+            "destroyed": bool(ent.get("destroyed")),
+            "looted": bool(ent.get("looted")),
+            "alive": bool(ent.get("alive", True)),
+            "available": bool(ent.get("available", True)),
+            "last_seen_turn_id": last_seen,
+        }
+        if "hp" in ent:
+            record["hp"] = ent["hp"]
+            record["max_hp"] = ent.get("max_hp", ent["hp"])
+        if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
+            record["disposition"] = ent.get("disposition", "neutral")
+            record["favorability"] = ent.get("favorability", 0)
+            personality = ent.get("personality")
+            if isinstance(personality, dict):
+                record["personality"] = {
+                    "traits": personality.get("traits", []),
+                    "manner": personality.get("manner", ""),
+                    "motivation": personality.get("motivation", ""),
+                }
+            elif isinstance(personality, str):
+                record["personality"] = {"traits": [], "manner": personality, "motivation": ""}
+        records.append(record)
+        recorded_names.add(name)
+
+    # Add inventory-only items that have no corresponding entity
+    for item_name in inventory_names:
+        if item_name not in recorded_names:
+            records.append({
+                "id": item_name,
+                "name": item_name,
+                "type": "item",
+                "tags": [],
+                "is_visible": False,
+                "is_in_inventory": True,
+                "hostile": False,
+                "locked": False,
+                "opened": False,
+                "destroyed": False,
+                "looted": True,
+                "alive": True,
+                "available": False,
+                "last_seen_turn_id": state.turn_id,
+            })
+
+    return records
+
+
 def _build_status(session) -> StatusData:
     state = session.game.state
     scene = state.get_current_scene()
@@ -252,6 +413,7 @@ def _build_status(session) -> StatusData:
         scene_name=str(scene.get("name", state.get_current_scene_id())),
         scene_description=str(scene.get("description", "")),
         visible_entities=entity_list,
+        known_entities=_build_known_entities(session),
         hostile_count=hostile_count,
         hints=state.get_available_action_hints() or ["检查周围", "等待/观察局势"],
         is_game_over=bool(state.flags.get("game_over")),

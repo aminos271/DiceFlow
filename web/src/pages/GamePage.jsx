@@ -18,6 +18,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const [sending, setSending] = useState(false)
   const [pendingStatus, setPendingStatus] = useState('')
   const [metaToast, setMetaToast] = useState('')
+  const [selectedEntity, setSelectedEntity] = useState(null)
   const timersRef = useRef([])
 
   useEffect(() => {
@@ -35,6 +36,14 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     // Cleanup timers on unmount
     return () => timersRef.current.forEach(clearTimeout)
   }, [])
+
+  // Clear selected entity when it no longer exists in known_entities
+  useEffect(() => {
+    if (selectedEntity && status?.known_entities) {
+      const stillExists = status.known_entities.some(e => e.id === selectedEntity.id)
+      if (!stillExists) setSelectedEntity(null)
+    }
+  }, [status?.known_entities, selectedEntity])
 
   const clearTimers = () => {
     timersRef.current.forEach(clearTimeout)
@@ -86,6 +95,17 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     }
   }, [sessionId])
 
+  const handleSelectEntity = useCallback((entityIdOrName) => {
+    if (!status?.known_entities) return
+    let found = status.known_entities.find(e => e.id === entityIdOrName)
+    if (!found) {
+      found = status.known_entities.find(e => e.name === entityIdOrName)
+    }
+    if (found) {
+      setSelectedEntity(prev => prev?.id === found.id ? null : found)
+    }
+  }, [status?.known_entities])
+
   const endingLabel = (e) => {
     if (!e) return ''
     if (e === 'victory') return '胜利！'
@@ -106,7 +126,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
 
       <div className="game-content">
         <TurnHistory turns={turns} />
-        <StatusSidebar status={status} />
+        <StatusSidebar status={status} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} />
       </div>
 
       {metaToast && <div className="meta-toast">{metaToast}</div>}

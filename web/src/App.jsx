@@ -72,5 +72,5 @@ export default function App() {
     )
   }
 
-  return <ScriptSelect scripts={scripts} onSelect={handleSelectScript} />
+  return <ScriptSelect scripts={scripts} sessions={sessions} onSelect={handleSelectScript} onContinue={handleViewSession} />
 }
