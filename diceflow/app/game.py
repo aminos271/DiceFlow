@@ -50,6 +50,7 @@ class Game:
         validation = validate(action, self.state)
         action = validation.pop("_normalized_action", action)
         validation.pop("_implied_spawn_applied", None)  # consumed by validate()
+        self.state.note_player_interaction(action)
 
         world_changes = dynamic_world_phase(action, validation, self.state, self.llm)
         if world_changes:

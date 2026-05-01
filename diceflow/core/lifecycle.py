@@ -67,6 +67,18 @@ def mark_inventory_item(entity: dict[str, Any], turn_id: int) -> None:
     entity["lifecycle"] = lifecycle
 
 
+def note_player_interaction(entity: dict[str, Any], turn_id: int) -> None:
+    lifecycle = _merged_lifecycle(
+        entity.get("lifecycle"),
+        category=str(entity.get("lifecycle", {}).get("category") or "persistent"),
+        phase=_phase_for_entity(entity),
+        origin=entity.get("lifecycle", {}).get("origin", {}),
+    )
+    lifecycle["last_player_interaction_turn_id"] = turn_id
+    lifecycle["updated_turn_id"] = turn_id
+    entity["lifecycle"] = lifecycle
+
+
 def mark_removed_entity(entity_id: str, entity: dict[str, Any], turn_id: int) -> dict[str, Any]:
     lifecycle = deepcopy(entity.get("lifecycle", {}))
     lifecycle["phase"] = "removed"
@@ -117,7 +129,11 @@ def _merged_lifecycle(
             merged["phase"] = phase
         if not merged.get("category"):
             merged["category"] = category
+        merged.setdefault("updated_turn_id", int(origin.get("turn_id", 0) or 0))
+        merged.setdefault("last_player_interaction_turn_id", int(origin.get("turn_id", 0) or 0))
         return merged
+    base["updated_turn_id"] = int(origin.get("turn_id", 0) or 0)
+    base["last_player_interaction_turn_id"] = int(origin.get("turn_id", 0) or 0)
     return base
 
 
@@ -129,5 +145,4 @@ def _phase_for_entity(entity: dict[str, Any]) -> str:
     if not entity.get("visible", True) or not entity.get("available", True):
         return "hidden"
     return "active"
-
 

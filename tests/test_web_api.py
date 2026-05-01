@@ -238,6 +238,51 @@ class TestSessionPersistence:
         assert len(store2.sessions[sid].turn_history) == 2
         assert resp.json()["status"]["turn_id"] == 2
 
+    def test_recovered_session_has_history(self, isolated_store):
+        """Restored session must carry snapshot history entries."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "检查左门"})
+
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        assert len(restored.game.state.history) >= 1
+        assert restored.game.state.history[0]["player_input"] == "检查左门"
+
+    def test_recovered_session_has_runtime_patches(self, isolated_store):
+        """Restored session must restore script_patches list."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "检查左门"})
+
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        # script_patches restored via _restore_snapshot
+        assert isinstance(restored.game.state.script_patches, list)
+
+    def test_use_llm_persisted_and_restored(self, isolated_store):
+        """use_llm=false must survive disk round-trip."""
+        data = _create_session(isolated_store, use_llm=False)
+        sid = data["session_id"]
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "检查左门"})
+
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        assert restored.use_llm is False
+        assert restored.game.llm is None
+
 
 class TestLLMKeySecurity:
     def test_llm_key_not_in_response(self, isolated_store):
@@ -478,3 +523,89 @@ class TestSessionDelete:
         assert filepath.exists()
         client.delete(f"/api/sessions/{sid}")
         assert not filepath.exists()
+
+
+class TestEntityEdit:
+    def test_edit_within_3_turns_rejected(self, isolated_store):
+        """Editing an entity within 3 turns of interaction must be rejected."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        # Run 1 turn — turn_id becomes 1, turns_since=1 for script entities
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "等待"})
+        resp = client.patch(f"/api/sessions/{sid}/entities/guard_1", json={"patch": {"name": "测试守卫"}})
+        assert resp.status_code == 409, resp.text
+        assert "不足 3 回合" in resp.json()["detail"]
+
+    def test_edit_after_3_turns_succeeds(self, isolated_store):
+        """After 3+ turns without interaction, editing an NPC must succeed."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        # Advance 3 turns
+        for _ in range(3):
+            client.post(f"/api/sessions/{sid}/turns", json={"input": "等待"})
+        # Now turn_id=3, turns_since_interaction=3 for guard_1 (origin turn_id=0)
+        resp = client.patch(f"/api/sessions/{sid}/entities/guard_1", json={"patch": {"name": "测试守卫"}})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["entity"]["name"] == "测试守卫"
+
+    def test_edit_updates_can_edit_flag(self, isolated_store):
+        """After editing, can_edit turns false because last_interaction_turn_id is updated."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        for _ in range(3):
+            client.post(f"/api/sessions/{sid}/turns", json={"input": "等待"})
+        resp = client.patch(f"/api/sessions/{sid}/entities/guard_1", json={"patch": {"name": "测试守卫"}})
+        assert resp.status_code == 200
+        # After edit, last_player_interaction_turn_id is updated to current turn
+        edited = resp.json()["entity"]
+        assert edited["can_edit"] is False  # Just interacted via edit
+        assert edited["last_interaction_turn_id"] == 3
+
+    def test_edit_unknown_entity(self, isolated_store):
+        """Editing a non-existent entity must return 404."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.patch(f"/api/sessions/{sid}/entities/nonexistent_id", json={"patch": {"name": "x"}})
+        assert resp.status_code == 404
+
+    def test_known_entities_has_edit_fields(self, isolated_store):
+        """All known_entities records must include can_edit, turns_since_interaction,
+        and last_interaction_turn_id fields."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        known = resp.json()["status"]["known_entities"]
+        assert len(known) > 0
+        for ent in known:
+            assert "can_edit" in ent, f"Missing can_edit in entity {ent['id']}"
+            assert "turns_since_interaction" in ent, f"Missing turns_since_interaction in entity {ent['id']}"
+            assert "last_interaction_turn_id" in ent, f"Missing last_interaction_turn_id in entity {ent['id']}"
+
+    def test_edit_persisted_to_disk(self, isolated_store):
+        """Entity edit must persist to the disk file."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        for _ in range(3):
+            client.post(f"/api/sessions/{sid}/turns", json={"input": "等待"})
+        client.patch(f"/api/sessions/{sid}/entities/guard_1", json={"patch": {"name": "改名守卫"}})
+
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        raw = json.loads(filepath.read_text(encoding="utf-8"))
+        entities = raw["snapshot"]["entities"]
+        assert entities["guard_1"]["name"] == "改名守卫"
+
+    def test_cannot_edit_id_field(self, isolated_store):
+        """Patching entity id must be silently ignored — the id does not change."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        for _ in range(3):
+            client.post(f"/api/sessions/{sid}/turns", json={"input": "等待"})
+        resp = client.patch(f"/api/sessions/{sid}/entities/guard_1", json={"patch": {"id": "fake_id"}})
+        assert resp.status_code == 200
+        assert resp.json()["entity"]["id"] == "guard_1"
+
+    def test_edit_nonexistent_session(self, isolated_store):
+        """Editing entity in a non-existent session must return 404."""
+        resp = client.patch("/api/sessions/deadbeef1234/entities/guard_1", json={"patch": {"name": "x"}})
+        assert resp.status_code == 404

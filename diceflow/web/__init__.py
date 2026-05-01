@@ -22,6 +22,7 @@ class Session:
     game: Game = field(repr=False)
     turn_history: list[dict[str, Any]] = field(default_factory=list)
     display_name: str = ""
+    use_llm: bool = True
 
     def to_summary(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class Session:
             "turn_history": self.turn_history,
             "is_game_over": bool(self.game.state.flags.get("game_over")),
             "ending": self.game.state.flags.get("ending"),
+            "use_llm": self.use_llm,
         }
 
     def _ending(self) -> str | None:
@@ -70,6 +72,7 @@ class SessionStore:
             created_at=now,
             updated_at=now,
             game=game,
+            use_llm=use_llm,
         )
         self.sessions[session_id] = session
         self.save_to_disk(session)
@@ -104,6 +107,7 @@ class SessionStore:
             "updated_at": session.updated_at,
             "turn_history": session.turn_history,
             "snapshot": session.game.state.get_snapshot(),
+            "use_llm": session.use_llm,
         }
         filepath = self.data_dir / f"{session.session_id}.json"
         filepath.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -126,13 +130,14 @@ class SessionStore:
                 display_name=display_name,
                 created_at=record.get("created_at", ""),
                 updated_at=record.get("updated_at", ""),
-                game=_make_stub_game(record.get("script_id", "tomb_entrance")),
+                game=_make_restored_game(
+                    record.get("script_id", "tomb_entrance"),
+                    record.get("snapshot"),
+                    bool(record.get("use_llm", True)),
+                ),
                 turn_history=record.get("turn_history", []),
+                use_llm=bool(record.get("use_llm", True)),
             )
-            # Restore snapshot if available
-            snapshot = record.get("snapshot")
-            if snapshot:
-                _restore_snapshot(session.game, snapshot)
             self.sessions[sid] = session
 
 
@@ -140,29 +145,33 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _make_stub_game(script_id: str) -> Game:
-    """Create a stub Game for a restored session.  The game is not playable —
-    it only holds read-only history.  A new session must be created to play."""
-    return Game(script=load_script(script_id), use_llm=False)
+def _make_restored_game(script_id: str, snapshot: object, use_llm: bool) -> Game:
+    game = Game(script=load_script(script_id), use_llm=use_llm)
+    if isinstance(snapshot, dict):
+        _restore_snapshot(game, snapshot)
+    return game
 
 
 def _restore_snapshot(game: Game, snapshot: dict[str, Any]) -> None:
-    """Restore game state from a snapshot for read-only display."""
+    """Restore game state from a snapshot for continued play."""
     state = game.state
+    state.script = load_script(game.script.get("id") or snapshot.get("script_id") or "")
+    state.script_patches = []
+    for patch in snapshot.get("script_patches", []):
+        if isinstance(patch, dict):
+            state.apply_script_patch(patch)
     state.turn_id = snapshot.get("turn_id", 0)
     if "player" in snapshot:
-        state.player.update(snapshot["player"])
+        state.player = snapshot["player"]
     if "scene" in snapshot:
-        state.scene.update(snapshot["scene"])
+        state.scene = snapshot["scene"]
     if "entities" in snapshot:
-        state.entities.update(snapshot["entities"])
+        state.entities = snapshot["entities"]
     if "flags" in snapshot:
-        state.flags.update(snapshot["flags"])
+        state.flags = snapshot["flags"]
     if "recent_events" in snapshot:
         state.recent_events = list(snapshot["recent_events"])
     if "entity_journal" in snapshot:
         state.entity_journal = list(snapshot["entity_journal"])
-    if "script_patches" in snapshot:
-        state.script_patches = list(snapshot["script_patches"])
     if "history" in snapshot:
         state.history = list(snapshot["history"])

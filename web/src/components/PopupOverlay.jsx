@@ -1,28 +1,9 @@
-import { useState } from 'react'
-
-export function hpColor(hp, maxHp) {
-  const ratio = maxHp > 0 ? hp / maxHp : 0
-  if (ratio <= 0.3) return 'var(--red)'
-  if (ratio <= 0.6) return 'var(--yellow)'
-  return 'var(--green)'
-}
+import { useState, useEffect } from 'react'
+import { hpColor } from './StatusSidebar.jsx'
 
 function _dispositionLabel(d) {
   const labels = { friendly: '友善', neutral: '中立', suspicious: '怀疑', hostile: '敌对' }
   return labels[d] || d
-}
-
-function AccordionSection({ title, count, expanded, onToggle, children }) {
-  return (
-    <div className="status-section">
-      <h4 className="section-header" onClick={onToggle}>
-        <span className="section-arrow">{expanded ? '▼' : '▶'}</span>
-        <span>{title}</span>
-        {count !== undefined && <span className="section-count">({count})</span>}
-      </h4>
-      {expanded && children}
-    </div>
-  )
 }
 
 function DetailRow({ label, value }) {
@@ -34,7 +15,7 @@ function DetailRow({ label, value }) {
   )
 }
 
-function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
+function EntityDetailView({ entity, sessionId, onEditEntity, onClose }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({})
@@ -100,7 +81,7 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   }
 
   return (
-    <div className="entity-detail-panel">
+    <div>
       <div className="detail-header">
         <h3>{entity.name}</h3>
         <div className="detail-header-actions">
@@ -214,150 +195,177 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   )
 }
 
-export default function StatusSidebar({ status, selectedEntity, onSelectEntity, sessionId, onEditEntity }) {
-  const [expanded, setExpanded] = useState({
-    status: true,
-    backpack: true,
-    scene: true,
-    entities: true,
-    hints: false,
-  })
+export default function PopupOverlay({ type, status, sessionId, onClose, onEditEntity }) {
+  const [detailEntityId, setDetailEntityId] = useState(null)
 
-  if (!status) return null
+  // Clear detail view when panel type changes or modal closes
+  useEffect(() => {
+    setDetailEntityId(null)
+  }, [type])
 
-  const toggleSection = (section) => {
-    setExpanded(prev => ({ ...prev, [section]: !prev[section] }))
+  // Derive current entity from latest status so edits are reflected immediately
+  const detailEntity = detailEntityId
+    ? (status?.known_entities || []).find(e => e.id === detailEntityId) || null
+    : null
+
+  if (!type || !status) return null
+
+  const handleBackdrop = (e) => {
+    if (e.target === e.currentTarget) onClose()
   }
 
-  const hpRatio = status.max_hp > 0 ? status.hp / status.max_hp : 0
-  const knownEntities = status.known_entities || []
+  const handleItemClick = (itemName) => {
+    const ent = status.known_entities?.find(e => e.name === itemName && e.is_in_inventory)
+    if (ent) {
+      setDetailEntityId(ent.id)
+    }
+  }
+
+  const handleKnownEntityClick = (entityId) => {
+    const ent = status.known_entities?.find(e => e.id === entityId)
+    if (ent) {
+      setDetailEntityId(ent.id)
+    }
+  }
+
+  const handleBackFromDetail = () => {
+    setDetailEntityId(null)
+  }
+
+  // Entity detail sub-panel
+  if (detailEntity) {
+    return (
+      <div className="popup-overlay" onClick={handleBackdrop}>
+        <div className="popup-card popup-entity-detail">
+          <div className="popup-header">
+            <span className="popup-title">{detailEntity.name}</span>
+            <button className="btn-close-detail" onClick={onClose}>✕</button>
+          </div>
+          <div className="popup-body">
+            <button className="btn-sm" onClick={handleBackFromDetail} style={{ marginBottom: 8 }}>← 返回</button>
+            <EntityDetailView
+              entity={detailEntity}
+              sessionId={sessionId}
+              onEditEntity={onEditEntity}
+              onClose={onClose}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderContent = () => {
+    if (type === 'skills') {
+      return (
+        <div className="popup-body">
+          {status.hints && status.hints.length > 0 ? (
+            status.hints.map((hint, i) => (
+              <div key={i} className="hint-item">💡 {hint}</div>
+            ))
+          ) : (
+            <div className="inv-empty">暂无可用行动</div>
+          )}
+        </div>
+      )
+    }
+
+    if (type === 'status') {
+      const hpRatio = status.max_hp > 0 ? status.hp / status.max_hp : 0
+      return (
+        <div className="popup-body">
+          <div className="hp-bar-outer">
+            <div
+              className="hp-bar-inner"
+              style={{
+                width: `${Math.max(0, Math.min(100, hpRatio * 100))}%`,
+                background: hpColor(status.hp, status.max_hp),
+              }}
+            />
+          </div>
+          <div className="hp-text" style={{ color: hpColor(status.hp, status.max_hp) }}>
+            ❤️ {status.hp} / {status.max_hp}
+          </div>
+          <DetailRow label="回合" value={String(status.turn_id)} />
+          <DetailRow label="场景" value={status.scene_name} />
+          <DetailRow label="敌对数量" value={String(status.hostile_count)} />
+          <DetailRow label="背包物品" value={String(status.inventory?.length ?? 0)} />
+          {status.is_game_over && (
+            <div className="popup-ending">游戏已结束</div>
+          )}
+        </div>
+      )
+    }
+
+    if (type === 'backpack') {
+      return (
+        <div className="popup-body">
+          {status.inventory && status.inventory.length > 0 ? (
+            <ul className="inv-list">
+              {status.inventory.map((item, i) => (
+                <li
+                  key={i}
+                  className="inv-item"
+                  onClick={() => handleItemClick(item)}
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="inv-empty">背包空空如也</div>
+          )}
+          {status.known_entities && status.known_entities.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div className="section-header" style={{ marginBottom: 8 }}>
+                <span>已知实体</span>
+                <span className="section-count">({status.known_entities.length})</span>
+              </div>
+              {status.known_entities.map((ent) => (
+                <div
+                  key={ent.id}
+                  className={`entity-item${ent.hostile ? ' hostile' : ''}`}
+                  onClick={() => handleKnownEntityClick(ent.id)}
+                >
+                  <div className="entity-main">
+                    {!ent.is_visible && <span className="entity-hidden-mark" title="当前不可见">⊙ </span>}
+                    {ent.is_visible && (ent.hostile ? '🔴 ' : '▸ ')}
+                    {ent.name}
+                    {ent.hp !== undefined && (
+                      <span style={{ color: hpColor(ent.hp, ent.max_hp || ent.hp), marginLeft: 6 }}>
+                        {ent.hp}/{ent.max_hp || ent.hp}
+                      </span>
+                    )}
+                    <span className="entity-tags">
+                      {ent.locked && ' 🔒'} {ent.opened && ' 🔓'} {ent.destroyed && ' 💔'} {ent.is_in_inventory && ' 🎒'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return null
+  }
+
+  const titles = {
+    skills: '技能栏',
+    status: '状态',
+    backpack: '背包',
+  }
 
   return (
-    <div className="status-sidebar">
-      <AccordionSection
-        title="状态"
-        expanded={expanded.status}
-        onToggle={() => toggleSection('status')}
-      >
-        <div className="hp-bar-outer">
-          <div
-            className="hp-bar-inner"
-            style={{
-              width: `${Math.max(0, Math.min(100, hpRatio * 100))}%`,
-              background: hpColor(status.hp, status.max_hp),
-            }}
-          />
+    <div className="popup-overlay" onClick={handleBackdrop}>
+      <div className="popup-card">
+        <div className="popup-header">
+          <span className="popup-title">{titles[type] || ''}</span>
+          <button className="btn-close-detail" onClick={onClose}>✕</button>
         </div>
-        <div className="hp-text" style={{ color: hpColor(status.hp, status.max_hp) }}>
-          ❤️ {status.hp} / {status.max_hp}
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        title="背包"
-        count={status.inventory?.length ?? 0}
-        expanded={expanded.backpack}
-        onToggle={() => toggleSection('backpack')}
-      >
-        {status.inventory && status.inventory.length > 0 ? (
-          <ul className="inv-list">
-            {status.inventory.map((item, i) => (
-              <li
-                key={i}
-                className={`inv-item${selectedEntity?.name === item ? ' selected' : ''}`}
-                onClick={() => onSelectEntity(item)}
-              >
-                {item}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="inv-empty">空空如也</div>
-        )}
-      </AccordionSection>
-
-      <AccordionSection
-        title="场景"
-        expanded={expanded.scene}
-        onToggle={() => toggleSection('scene')}
-      >
-        <div className="scene-name">📍 {status.scene_name}</div>
-        <div className="scene-desc">{status.scene_description}</div>
-      </AccordionSection>
-
-      <AccordionSection
-        title="实体记录"
-        count={knownEntities.length}
-        expanded={expanded.entities}
-        onToggle={() => toggleSection('entities')}
-      >
-        {knownEntities.length > 0 ? (
-          knownEntities.map((ent) => (
-            <div
-              key={ent.id}
-              className={`entity-item${ent.hostile ? ' hostile' : ''}${selectedEntity?.id === ent.id ? ' selected' : ''}`}
-              onClick={() => onSelectEntity(ent.id)}
-            >
-              <div className="entity-main">
-                {!ent.is_visible && <span className="entity-hidden-mark" title="当前不可见">⊙ </span>}
-                {ent.is_visible && (ent.hostile ? '🔴 ' : '▸ ')}
-                {ent.name}
-                {ent.hp !== undefined && (
-                  <span style={{ color: hpColor(ent.hp, ent.max_hp || ent.hp), marginLeft: 6 }}>
-                    {ent.hp}/{ent.max_hp || ent.hp}
-                  </span>
-                )}
-                <span className="entity-tags">
-                  {ent.locked && ' 🔒'} {ent.opened && ' 🔓'} {ent.destroyed && ' 💔'} {ent.is_in_inventory && ' 🎒'}
-                </span>
-              </div>
-              {ent.personality && (
-                <div className="entity-npc-info">
-                  {ent.disposition && (
-                    <span className={`npc-disposition npc-${ent.disposition}`}>
-                      {_dispositionLabel(ent.disposition)}
-                    </span>
-                  )}
-                  {ent.favorability !== undefined && (
-                    <span className="npc-favor" style={{ color: ent.favorability > 0 ? 'var(--green)' : ent.favorability < 0 ? 'var(--red)' : 'var(--text-dim)' }}>
-                      {ent.favorability > 0 ? '+' : ''}{ent.favorability}
-                    </span>
-                  )}
-                  {ent.personality.traits && ent.personality.traits.length > 0 && (
-                    <span className="npc-traits">{ent.personality.traits.join('、')}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="inv-empty">暂无记录</div>
-        )}
-      </AccordionSection>
-
-      <AccordionSection
-        title="提示"
-        count={status.hints?.length ?? 0}
-        expanded={expanded.hints}
-        onToggle={() => toggleSection('hints')}
-      >
-        {status.hints && status.hints.length > 0 ? (
-          status.hints.map((hint, i) => (
-            <div key={i} className="hint-item">💡 {hint}</div>
-          ))
-        ) : (
-          <div className="inv-empty">暂无提示</div>
-        )}
-      </AccordionSection>
-
-      {selectedEntity && (
-        <EntityDetailPanel
-          entity={selectedEntity}
-          sessionId={sessionId}
-          onEditEntity={onEditEntity}
-          onClose={() => onSelectEntity(selectedEntity.id)}
-        />
-      )}
+        {renderContent()}
+      </div>
     </div>
   )
 }

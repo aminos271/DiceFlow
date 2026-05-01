@@ -900,6 +900,164 @@ input:focus {
   background: #00acc1;
 }
 
+/* ── Popup Overlay ─────────────────────────────────────────────── */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+.popup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.popup-card.popup-entity-detail {
+  max-height: 85vh;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.popup-title {
+  color: var(--cyan);
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.popup-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.popup-body .hint-item {
+  padding: 4px 0;
+}
+
+.popup-body .inv-list {
+  margin-bottom: 8px;
+}
+
+.popup-body .entity-item {
+  cursor: pointer;
+}
+
+.popup-body .entity-item:hover {
+  background: var(--surface2);
+}
+
+.popup-ending {
+  color: var(--yellow);
+  font-size: 13px;
+  margin-top: 8px;
+  font-weight: bold;
+}
+
+/* ── Detail Header Actions ─────────────────────────────────────── */
+.detail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Edit Form ─────────────────────────────────────────────────── */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.edit-field label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.edit-field input,
+.edit-field select {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  background: var(--bg);
+  color: var(--text-bright);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+}
+
+.edit-field input:focus,
+.edit-field select:focus {
+  border-color: var(--cyan);
+}
+
+.edit-hp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-hp-row input {
+  width: 80px;
+}
+
+.edit-hp-row span {
+  color: var(--text-dim);
+}
+
+.edit-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.edit-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.edit-check input[type="checkbox"] {
+  accent-color: var(--cyan);
+  width: 14px;
+  height: 14px;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* ── Scrollbar ─────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

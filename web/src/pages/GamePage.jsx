@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getSession, runTurn, runMeta } from '../api.js'
+import { getSession, runTurn, updateEntity } from '../api.js'
 import TurnHistory from '../components/TurnHistory.jsx'
 import StatusSidebar from '../components/StatusSidebar.jsx'
 import InputBar from '../components/InputBar.jsx'
+import PopupOverlay from '../components/PopupOverlay.jsx'
 
 const PROGRESS_STEPS = [
   { delay: 0, text: '解析行动中...' },
@@ -17,8 +18,8 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const [ending, setEnding] = useState(null)
   const [sending, setSending] = useState(false)
   const [pendingStatus, setPendingStatus] = useState('')
-  const [metaToast, setMetaToast] = useState('')
   const [selectedEntity, setSelectedEntity] = useState(null)
+  const [panel, setPanel] = useState(null) // { type: 'skills'|'status'|'backpack' }
   const timersRef = useRef([])
 
   useEffect(() => {
@@ -78,21 +79,20 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     }
   }, [sessionId, onSessionEnded])
 
-  const handleMeta = useCallback(async (command) => {
-    try {
-      const data = await runMeta(sessionId, command)
-      if (data.status) {
-        setStatus(data.status)
-        setIsGameOver(data.status.is_game_over || false)
-        setEnding(data.status.ending || null)
-      }
-      if (data.result) {
-        setMetaToast(data.result)
-        setTimeout(() => setMetaToast(''), 2500)
-      }
-    } catch (err) {
-      alert(`查看失败: ${err.message}`)
-    }
+  const handleOpenPanel = useCallback((panelType) => {
+    setPanel({ type: panelType })
+  }, [])
+
+  const handleClosePanel = useCallback(() => {
+    setPanel(null)
+  }, [])
+
+  const handleEntityEdit = useCallback(async (sid, entityId, patch) => {
+    await updateEntity(sid, entityId, patch)
+    // Refresh status to get updated known_entities
+    const data = await getSession(sessionId)
+    setStatus(data.status || null)
+    setSelectedEntity(null)
   }, [sessionId])
 
   const handleSelectEntity = useCallback((entityIdOrName) => {
@@ -126,10 +126,15 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
 
       <div className="game-content">
         <TurnHistory turns={turns} />
-        <StatusSidebar status={status} selectedEntity={selectedEntity} onSelectEntity={handleSelectEntity} />
+        <StatusSidebar
+          status={status}
+          selectedEntity={selectedEntity}
+          onSelectEntity={handleSelectEntity}
+          sessionId={sessionId}
+          onEditEntity={handleEntityEdit}
+        />
       </div>
 
-      {metaToast && <div className="meta-toast">{metaToast}</div>}
       {isGameOver ? (
         <div className="game-over-overlay">
           <span className="ending">结局: {endingLabel(ending)}</span>
@@ -138,12 +143,20 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
       ) : (
         <InputBar
           onSend={handleSend}
-          onMeta={handleMeta}
+          onOpenPanel={handleOpenPanel}
           disabled={sending}
           pendingStatus={pendingStatus}
           gameOver={isGameOver}
         />
       )}
+
+      <PopupOverlay
+        type={panel?.type}
+        status={status}
+        sessionId={sessionId}
+        onClose={handleClosePanel}
+        onEditEntity={handleEntityEdit}
+      />
     </div>
   )
 }

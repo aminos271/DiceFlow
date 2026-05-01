@@ -59,6 +59,10 @@ class UpdateSessionRequest(BaseModel):
     display_name: str | None = None
 
 
+class UpdateEntityRequest(BaseModel):
+    patch: dict[str, Any]
+
+
 class StatusData(BaseModel):
     turn_id: int
     hp: int
@@ -137,6 +141,25 @@ def update_session(session_id: str, body: UpdateSessionRequest) -> dict[str, Any
         session.display_name = name
         store.save_to_disk(session)
     return {"session_id": session.session_id, "display_name": session.display_name}
+
+
+@app.patch("/api/sessions/{session_id}/entities/{entity_id}")
+def update_entity(session_id: str, entity_id: str, body: UpdateEntityRequest) -> dict[str, Any]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    entity = session.game.state.entities.get(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail=f"entity not found: {entity_id}")
+    editable_reason = _editable_entity_error(session, entity_id, entity)
+    if editable_reason:
+        raise HTTPException(status_code=409, detail=editable_reason)
+    try:
+        session.game.state.update_entity(entity_id, body.patch)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"entity not found: {entity_id}") from None
+    store.save_to_disk(session)
+    return {"entity": _entity_record(session, entity_id, session.game.state.entities[entity_id])}
 
 
 @app.delete("/api/sessions/{session_id}")
@@ -291,56 +314,16 @@ def _build_known_entities(session) -> list[dict[str, Any]]:
                 "alive": lifecycle.get("phase") not in ("destroyed", "removed"),
                 "available": False,
                 "last_seen_turn_id": je.get("turn_id"),
+                "last_interaction_turn_id": lifecycle.get("last_player_interaction_turn_id"),
+                "turns_since_interaction": _turns_since_interaction(state, lifecycle),
+                "can_edit": False,
             })
             recorded_names.add(name)
             continue
 
         # Active entity in state.entities
         name = str(ent.get("name", eid))
-        is_vis = eid in visible
-        in_inv = name in inventory_names or ent.get("lifecycle", {}).get("phase") == "inventory"
-
-        if is_vis:
-            last_seen = state.turn_id
-        else:
-            je = journal_by_entity.get(eid)
-            if je:
-                last_seen = je.get("turn_id")
-            else:
-                last_seen = ent.get("lifecycle", {}).get("updated_turn_id")
-
-        record: dict[str, Any] = {
-            "id": eid,
-            "name": name,
-            "type": ent.get("type", ""),
-            "tags": ent.get("tags", []),
-            "is_visible": is_vis,
-            "is_in_inventory": in_inv,
-            "hostile": bool(ent.get("hostile") or "hostile" in ent.get("tags", [])),
-            "locked": bool(ent.get("locked")),
-            "opened": bool(ent.get("opened")),
-            "destroyed": bool(ent.get("destroyed")),
-            "looted": bool(ent.get("looted")),
-            "alive": bool(ent.get("alive", True)),
-            "available": bool(ent.get("available", True)),
-            "last_seen_turn_id": last_seen,
-        }
-        if "hp" in ent:
-            record["hp"] = ent["hp"]
-            record["max_hp"] = ent.get("max_hp", ent["hp"])
-        if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
-            record["disposition"] = ent.get("disposition", "neutral")
-            record["favorability"] = ent.get("favorability", 0)
-            personality = ent.get("personality")
-            if isinstance(personality, dict):
-                record["personality"] = {
-                    "traits": personality.get("traits", []),
-                    "manner": personality.get("manner", ""),
-                    "motivation": personality.get("motivation", ""),
-                }
-            elif isinstance(personality, str):
-                record["personality"] = {"traits": [], "manner": personality, "motivation": ""}
-        records.append(record)
+        records.append(_entity_record(session, eid, ent, journal_entry=journal_by_entity.get(eid)))
         recorded_names.add(name)
 
     # Add inventory-only items that have no corresponding entity
@@ -361,6 +344,9 @@ def _build_known_entities(session) -> list[dict[str, Any]]:
                 "alive": True,
                 "available": False,
                 "last_seen_turn_id": state.turn_id,
+                "last_interaction_turn_id": None,
+                "turns_since_interaction": None,
+                "can_edit": False,
             })
 
     return records
@@ -419,6 +405,80 @@ def _build_status(session) -> StatusData:
         is_game_over=bool(state.flags.get("game_over")),
         ending=state.flags.get("ending"),
     )
+
+
+def _entity_record(session, entity_id: str, ent: dict[str, Any], journal_entry: dict[str, Any] | None = None) -> dict[str, Any]:
+    state = session.game.state
+    inventory_names = set(state.get_inventory_items())
+    visible = state.get_visible_entities()
+    name = str(ent.get("name", entity_id))
+    is_vis = entity_id in visible
+    in_inv = name in inventory_names or ent.get("lifecycle", {}).get("phase") == "inventory"
+
+    if is_vis:
+        last_seen = state.turn_id
+    elif journal_entry:
+        last_seen = journal_entry.get("turn_id")
+    else:
+        last_seen = ent.get("lifecycle", {}).get("updated_turn_id")
+
+    lifecycle = ent.get("lifecycle", {}) if isinstance(ent.get("lifecycle"), dict) else {}
+    turns_since = _turns_since_interaction(state, lifecycle)
+    record: dict[str, Any] = {
+        "id": entity_id,
+        "name": name,
+        "type": ent.get("type", ""),
+        "tags": ent.get("tags", []),
+        "is_visible": is_vis,
+        "is_in_inventory": in_inv,
+        "hostile": bool(ent.get("hostile") or "hostile" in ent.get("tags", [])),
+        "locked": bool(ent.get("locked")),
+        "opened": bool(ent.get("opened")),
+        "destroyed": bool(ent.get("destroyed")),
+        "looted": bool(ent.get("looted")),
+        "alive": bool(ent.get("alive", True)),
+        "available": bool(ent.get("available", True)),
+        "last_seen_turn_id": last_seen,
+        "last_interaction_turn_id": lifecycle.get("last_player_interaction_turn_id"),
+        "turns_since_interaction": turns_since,
+        "can_edit": _editable_entity_error(session, entity_id, ent) is None,
+    }
+    if "hp" in ent:
+        record["hp"] = ent["hp"]
+        record["max_hp"] = ent.get("max_hp", ent["hp"])
+    if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
+        record["disposition"] = ent.get("disposition", "neutral")
+        record["favorability"] = ent.get("favorability", 0)
+        personality = ent.get("personality")
+        if isinstance(personality, dict):
+            record["personality"] = {
+                "traits": personality.get("traits", []),
+                "manner": personality.get("manner", ""),
+                "motivation": personality.get("motivation", ""),
+            }
+        elif isinstance(personality, str):
+            record["personality"] = {"traits": [], "manner": personality, "motivation": ""}
+    return record
+
+
+def _turns_since_interaction(state, lifecycle: dict[str, Any]) -> int | None:
+    last_turn = lifecycle.get("last_player_interaction_turn_id")
+    if last_turn is None:
+        return None
+    return max(0, state.turn_id - int(last_turn))
+
+
+def _editable_entity_error(session, entity_id: str, ent: dict[str, Any]) -> str | None:
+    del entity_id
+    tags = {str(tag) for tag in ent.get("tags", [])}
+    entity_type = str(ent.get("type") or "")
+    if entity_type not in {"npc", "item", "pickup", "container", "obstacle"} and "npc" not in tags:
+        return "只有 NPC 或物品类实体支持手动编辑"
+    lifecycle = ent.get("lifecycle", {}) if isinstance(ent.get("lifecycle"), dict) else {}
+    turns_since = _turns_since_interaction(session.game.state, lifecycle)
+    if turns_since is None or turns_since < 3:
+        return "该实体距离上次互动不足 3 回合，暂不可编辑"
+    return None
 
 
 def _help_text() -> str:

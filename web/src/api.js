@@ -52,6 +52,13 @@ export function updateSession(sessionId, displayName) {
   })
 }
 
+export function updateEntity(sessionId, entityId, patch) {
+  return request(`/sessions/${sessionId}/entities/${entityId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ patch }),
+  })
+}
+
 export function deleteSession(sessionId) {
   return request(`/sessions/${sessionId}/delete`, {
     method: 'POST',

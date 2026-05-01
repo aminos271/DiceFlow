@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function InputBar({ onSend, onMeta, disabled, pendingStatus, gameOver }) {
+export default function InputBar({ onSend, onOpenPanel, disabled, pendingStatus, gameOver }) {
   const [text, setText] = useState('')
 
   const handleSubmit = (e) => {
@@ -39,10 +39,9 @@ export default function InputBar({ onSend, onMeta, disabled, pendingStatus, game
           发送
         </button>
         <div className="meta-buttons">
-          <button type="button" onClick={() => onMeta('look')} title="查看周围" disabled={disabled}>看</button>
-          <button type="button" onClick={() => onMeta('inv')} title="查看背包" disabled={disabled}>背包</button>
-          <button type="button" onClick={() => onMeta('status')} title="查看状态" disabled={disabled}>状态</button>
-          <button type="button" onClick={() => onMeta('hint')} title="查看提示" disabled={disabled}>提示</button>
+          <button type="button" onClick={() => onOpenPanel('skills')} title="技能栏" disabled={disabled}>技能栏</button>
+          <button type="button" onClick={() => onOpenPanel('status')} title="查看状态" disabled={disabled}>状态</button>
+          <button type="button" onClick={() => onOpenPanel('backpack')} title="查看背包" disabled={disabled}>背包</button>
         </div>
       </form>
     </div>

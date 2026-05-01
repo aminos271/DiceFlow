@@ -10,6 +10,7 @@ from diceflow.core.lifecycle import (
     initialize_entity,
     mark_inventory_item,
     mark_removed_entity,
+    note_player_interaction,
     prepare_spawned_entity,
 )
 from diceflow.core.matching import match_entity_name
@@ -73,7 +74,8 @@ class GameState:
             "scene": deepcopy(self.scene),
             "entities": deepcopy(self.entities),
             "flags": deepcopy(self.flags),
-            "recent_events": list(self.recent_events[-5:]),
+            "recent_events": list(self.recent_events[-10:]),
+            "history": deepcopy(self.history[-20:]),
             "entity_journal": deepcopy(self.entity_journal[-10:]),
             "script_patches": deepcopy(self.script_patches[-10:]),
         }
@@ -202,6 +204,7 @@ class GameState:
             entity = self.entities.get(entity_id)
             if entity:
                 self._apply_object_changes(entity, entity_changes)
+                self._sync_lifecycle_phase(entity)
 
         for entity_id in changes.get("move_item_to_inventory", []):
             entity = self.entities.get(entity_id)
@@ -228,11 +231,38 @@ class GameState:
 
     def record_turn(self, record: dict[str, Any]) -> None:
         self.history.append(record)
-        self.history = self.history[-20:]
+        self.history = self.history[-30:]
 
     def advance_turn(self) -> int:
         self.turn_id += 1
         return self.turn_id
+
+    def note_player_interaction(self, action: dict[str, Any]) -> None:
+        for field in ("target_id", "tool_id"):
+            entity_id = self._resolve_entity_reference(action.get(field))
+            if entity_id and entity_id in self.entities:
+                note_player_interaction(self.entities[entity_id], self.turn_id)
+
+        for field in ("target", "tool"):
+            entity_id = self._resolve_entity_reference(action.get(field))
+            if entity_id and entity_id in self.entities:
+                note_player_interaction(self.entities[entity_id], self.turn_id)
+
+    def update_entity(self, entity_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+        entity = self.entities.get(entity_id)
+        if not entity:
+            raise KeyError(entity_id)
+        sanitized = deepcopy(patch)
+        sanitized.pop("id", None)
+        sanitized.pop("lifecycle", None)
+        self._apply_object_changes(entity, sanitized)
+        if "hp" in entity:
+            entity["hp"] = max(0, min(entity["hp"], entity.get("max_hp", entity["hp"])))
+            if entity["hp"] <= 0:
+                entity["alive"] = False
+        note_player_interaction(entity, self.turn_id)
+        self._sync_lifecycle_phase(entity)
+        return deepcopy(entity)
 
     def _apply_object_changes(self, target: dict[str, Any], changes: dict[str, Any]) -> None:
         for key, value in changes.items():
@@ -267,6 +297,26 @@ class GameState:
         else:
             lifecycle["phase"] = "active"
         lifecycle["updated_turn_id"] = self.turn_id
+
+    def _resolve_entity_reference(self, value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized in self.entities:
+            return normalized
+        entity_id = self.find_entity_id(normalized)
+        if entity_id:
+            return entity_id
+        inventory_item = self.find_inventory_item(normalized)
+        if not inventory_item:
+            return None
+        for entity_id, entity in self.entities.items():
+            item_name = str(entity.get("item_id") or entity.get("name") or entity_id)
+            if item_name == inventory_item:
+                return entity_id
+        return None
 
     def _refresh_end_state(self) -> None:
         for condition in self.script.get("ending_conditions", []):
