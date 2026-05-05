@@ -49,6 +49,7 @@ export default function InputBar({ onSend, onOpenPanel, value, onChange, focusTo
           <button type="button" onClick={() => onOpenPanel('skills')} title="技能栏" disabled={disabled}>技能栏</button>
           <button type="button" onClick={() => onOpenPanel('status')} title="查看状态" disabled={disabled}>状态</button>
           <button type="button" onClick={() => onOpenPanel('backpack')} title="查看背包" disabled={disabled}>背包</button>
+          <button type="button" onClick={() => onOpenPanel('lorebook')} title="查看资料库" disabled={disabled}>资料库</button>
         </div>
       </form>
     </div>

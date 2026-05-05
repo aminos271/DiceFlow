@@ -648,3 +648,256 @@ class TestEntityEdit:
         """Editing entity in a non-existent session must return 404."""
         resp = client.patch("/api/sessions/deadbeef1234/entities/guard_1", json={"patch": {"name": "x"}})
         assert resp.status_code == 404
+
+
+class TestLorebook:
+    def test_new_session_has_empty_lorebook(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["entries"]["world_entries"] == []
+        assert body["entries"]["character_entries"] == []
+        assert body["entries"]["event_entries"] == []
+
+    def test_create_world_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world",
+            "title": "古墓传说",
+            "summary": "关于古墓的古老传说",
+            "content": "传说中古墓埋葬着一位古代君王。",
+            "tags": ["传说", "古墓"],
+            "pinned": True,
+        })
+        assert resp.status_code == 200, resp.text
+        entry = resp.json()["entry"]
+        assert entry["type"] == "world"
+        assert entry["title"] == "古墓传说"
+        assert entry["summary"] == "关于古墓的古老传说"
+        assert entry["content"] == "传说中古墓埋葬着一位古代君王。"
+        assert entry["tags"] == ["传说", "古墓"]
+        assert entry["pinned"] is True
+        assert entry["discovered"] is False
+        assert entry["source"] == "manual"
+        assert len(entry["id"]) == 12
+        assert "created_at" in entry
+        assert "updated_at" in entry
+
+        # Verify it appears in GET
+        resp2 = client.get(f"/api/sessions/{sid}/lorebook")
+        assert len(resp2.json()["entries"]["world_entries"]) == 1
+
+    def test_create_character_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "守卫长",
+            "summary": "守卫古墓入口的卫兵",
+            "linked_entity_id": "guard_1",
+        })
+        assert resp.status_code == 200, resp.text
+        entry = resp.json()["entry"]
+        assert entry["type"] == "character"
+        assert entry["title"] == "守卫长"
+        assert entry["linked_entity_id"] == "guard_1"
+
+    def test_create_event_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "event",
+            "title": "发现古墓",
+            "summary": "玩家发现了隐藏的古墓入口",
+            "linked_turn_ids": [1, 2, 3],
+        })
+        assert resp.status_code == 200, resp.text
+        entry = resp.json()["entry"]
+        assert entry["type"] == "event"
+        assert entry["linked_turn_ids"] == [1, 2, 3]
+
+    def test_update_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world",
+            "title": "原始标题",
+            "summary": "原始摘要",
+        })
+        entry_id = resp.json()["entry"]["id"]
+
+        resp2 = client.patch(f"/api/sessions/{sid}/lorebook/{entry_id}", json={
+            "title": "更新标题",
+            "summary": "更新摘要",
+            "pinned": True,
+        })
+        assert resp2.status_code == 200, resp2.text
+        updated = resp2.json()["entry"]
+        assert updated["title"] == "更新标题"
+        assert updated["summary"] == "更新摘要"
+        assert updated["pinned"] is True
+
+    def test_delete_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world",
+            "title": "待删除条目",
+        })
+        entry_id = resp.json()["entry"]["id"]
+
+        resp2 = client.delete(f"/api/sessions/{sid}/lorebook/{entry_id}")
+        assert resp2.status_code == 200, resp2.text
+        assert resp2.json()["status"] == "deleted"
+
+        # Verify it's gone
+        resp3 = client.get(f"/api/sessions/{sid}/lorebook")
+        assert len(resp3.json()["entries"]["world_entries"]) == 0
+
+    def test_delete_nonexistent_entry(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.delete(f"/api/sessions/{sid}/lorebook/deadbeef")
+        assert resp.status_code == 404
+
+    def test_linked_entity_id_can_be_null(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "无关联实体角色",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["entry"]["linked_entity_id"] is None
+
+    def test_linked_entity_id_can_be_valid_entity(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "关联守卫",
+            "linked_entity_id": "guard_1",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["entry"]["linked_entity_id"] == "guard_1"
+
+    def test_empty_title_rejected(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world",
+            "title": "",
+        })
+        assert resp.status_code == 422
+
+    def test_persistence_saves_and_restores_lorebook(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+
+        # Create entries
+        client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world", "title": "世界条目1",
+        })
+        client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character", "title": "角色条目1",
+        })
+        client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "event", "title": "事件条目1",
+        })
+
+        # Load from disk with a new store
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        assert len(restored.lorebook.world_entries) == 1
+        assert len(restored.lorebook.character_entries) == 1
+        assert len(restored.lorebook.event_entries) == 1
+        assert restored.lorebook.world_entries[0].title == "世界条目1"
+        assert restored.lorebook.character_entries[0].title == "角色条目1"
+        assert restored.lorebook.event_entries[0].title == "事件条目1"
+
+        # Can continue using lorebook
+        with mock.patch("diceflow.web.server.store", store2):
+            resp = client.get(f"/api/sessions/{sid}/lorebook")
+        assert resp.status_code == 200
+        assert len(resp.json()["entries"]["world_entries"]) == 1
+
+    def test_old_save_without_lorebook_field_loads(self, isolated_store):
+        """Session JSON without lorebook field must load with empty lorebook."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+
+        # Manually remove lorebook from the disk file
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        raw = json.loads(filepath.read_text(encoding="utf-8"))
+        del raw["lorebook"]
+        filepath.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # Load with a new store
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        assert restored.lorebook.world_entries == []
+        assert restored.lorebook.character_entries == []
+        assert restored.lorebook.event_entries == []
+
+    def test_lorebook_nonexistent_session(self, isolated_store):
+        resp = client.get("/api/sessions/deadbeef1234/lorebook")
+        assert resp.status_code == 404
+
+    def test_linked_entity_id_must_reference_valid_entity(self, isolated_store):
+        """Non-null linked_entity_id must exist in session entities (create)."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "幽灵角色",
+            "linked_entity_id": "nonexistent_entity_xyz",
+        })
+        assert resp.status_code == 422
+        assert "unknown entity" in resp.json()["detail"]
+
+    def test_linked_entity_id_validation_on_update(self, isolated_store):
+        """Update with invalid linked_entity_id must also be rejected."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "守卫角色",
+            "linked_entity_id": "guard_1",
+        })
+        entry_id = resp.json()["entry"]["id"]
+
+        resp2 = client.patch(f"/api/sessions/{sid}/lorebook/{entry_id}", json={
+            "linked_entity_id": "nonexistent_entity_xyz",
+        })
+        assert resp2.status_code == 422
+        assert "unknown entity" in resp2.json()["detail"]
+
+    def test_update_can_clear_linked_entity_id(self, isolated_store):
+        """Explicitly sending null must clear linked_entity_id."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "character",
+            "title": "守卫角色",
+            "linked_entity_id": "guard_1",
+        })
+        entry_id = resp.json()["entry"]["id"]
+        assert resp.json()["entry"]["linked_entity_id"] == "guard_1"
+
+        # Clear it by sending null
+        resp2 = client.patch(f"/api/sessions/{sid}/lorebook/{entry_id}", json={
+            "linked_entity_id": None,
+        })
+        assert resp2.status_code == 200, resp2.text
+        assert resp2.json()["entry"]["linked_entity_id"] is None

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { hpColor } from './StatusSidebar.jsx'
+import LorebookPanel from './LorebookPanel.jsx'
 
 function _dispositionLabel(d) {
   const labels = { friendly: '友善', neutral: '中立', suspicious: '怀疑', hostile: '敌对' }
@@ -348,6 +349,14 @@ export default function PopupOverlay({ type, status, sessionId, onClose, onEditE
       )
     }
 
+    if (type === 'lorebook') {
+      return (
+        <div className="popup-body">
+          <LorebookPanel sessionId={sessionId} />
+        </div>
+      )
+    }
+
     return null
   }
 
@@ -355,6 +364,7 @@ export default function PopupOverlay({ type, status, sessionId, onClose, onEditE
     skills: '技能栏',
     status: '状态',
     backpack: '背包',
+    lorebook: '资料库',
   }
 
   return (

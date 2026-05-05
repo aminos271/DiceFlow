@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from diceflow.app.game import Game
+from diceflow.core.lorebook import SessionLore
 from diceflow.scripting.loader import load_script
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sessions"
@@ -21,6 +22,7 @@ class Session:
     updated_at: str
     game: Game = field(repr=False)
     turn_history: list[dict[str, Any]] = field(default_factory=list)
+    lorebook: SessionLore = field(default_factory=SessionLore)
     display_name: str = ""
     use_llm: bool = True
 
@@ -107,6 +109,7 @@ class SessionStore:
             "updated_at": session.updated_at,
             "turn_history": session.turn_history,
             "snapshot": session.game.state.get_snapshot(),
+            "lorebook": session.lorebook.to_dict(),
             "use_llm": session.use_llm,
         }
         filepath = self.data_dir / f"{session.session_id}.json"
@@ -136,6 +139,7 @@ class SessionStore:
                     bool(record.get("use_llm", True)),
                 ),
                 turn_history=record.get("turn_history", []),
+                lorebook=SessionLore.from_dict(record.get("lorebook")),
                 use_llm=bool(record.get("use_llm", True)),
             )
             self.sessions[sid] = session

@@ -64,3 +64,29 @@ export function deleteSession(sessionId) {
     method: 'POST',
   })
 }
+
+// ── Lorebook ──────────────────────────────────────────────────────
+
+export function getLorebook(sessionId) {
+  return request(`/sessions/${sessionId}/lorebook`)
+}
+
+export function createLoreEntry(sessionId, entry) {
+  return request(`/sessions/${sessionId}/lorebook`, {
+    method: 'POST',
+    body: JSON.stringify(entry),
+  })
+}
+
+export function updateLoreEntry(sessionId, entryId, patch) {
+  return request(`/sessions/${sessionId}/lorebook/${entryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteLoreEntry(sessionId, entryId) {
+  return request(`/sessions/${sessionId}/lorebook/${entryId}`, {
+    method: 'DELETE',
+  })
+}

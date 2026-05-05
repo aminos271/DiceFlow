@@ -1123,7 +1123,8 @@ input:focus {
 }
 
 .edit-field input,
-.edit-field select {
+.edit-field select,
+.edit-field textarea {
   font-family: inherit;
   font-size: 13px;
   padding: 5px 8px;
@@ -1135,8 +1136,14 @@ input:focus {
 }
 
 .edit-field input:focus,
-.edit-field select:focus {
+.edit-field select:focus,
+.edit-field textarea:focus {
   border-color: var(--cyan);
+}
+
+.edit-field textarea {
+  resize: vertical;
+  min-height: 48px;
 }
 
 .edit-hp-row {
@@ -1216,4 +1223,219 @@ input:focus {
 .game-over-input button:hover {
   border-color: var(--cyan);
   color: var(--cyan);
+}
+
+/* ── Lorebook Panel ──────────────────────────────────────────────── */
+.lorebook-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.lore-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.lore-tab {
+  flex: 1;
+  padding: 6px 8px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.lore-tab:hover {
+  color: var(--text-bright);
+  border-color: var(--text-dim);
+}
+
+.lore-tab.active {
+  background: var(--surface);
+  color: var(--cyan);
+  border-color: var(--cyan);
+  border-bottom-color: var(--surface);
+}
+
+.lorebook-body {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lorebook-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lore-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.lore-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lore-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 12px 0;
+  text-align: center;
+}
+
+.lore-item {
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.12s;
+  font-size: 12px;
+}
+
+.lore-item:hover {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+.lore-item.active {
+  background: var(--surface2);
+  border-color: var(--cyan);
+}
+
+.lore-item.pinned {
+  border-left: 2px solid var(--yellow);
+}
+
+.lore-item-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-bright);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lore-pin,
+.lore-discovered {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.lore-item-tags {
+  font-size: 10px;
+  color: var(--blue);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lore-item-summary {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lorebook-main {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.lore-detail {
+  padding: 0 4px;
+}
+
+.lore-detail h3 {
+  font-size: 14px;
+  color: var(--text-bright);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lore-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.lore-detail-header h3 {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.lore-detail-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.lore-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lore-content {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.lore-error {
+  padding: 6px 10px;
+  background: var(--red-dim);
+  color: var(--white);
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.btn-danger {
+  background: var(--red-dim) !important;
+  color: var(--white) !important;
+  border-color: var(--red) !important;
+}
+
+.btn-danger:hover {
+  background: var(--red) !important;
 }

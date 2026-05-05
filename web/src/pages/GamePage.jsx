@@ -4,6 +4,7 @@ import TurnHistory from '../components/TurnHistory.jsx'
 import StatusSidebar from '../components/StatusSidebar.jsx'
 import InputBar from '../components/InputBar.jsx'
 import PopupOverlay from '../components/PopupOverlay.jsx'
+import LorebookPanel from '../components/LorebookPanel.jsx'
 
 const PROGRESS_STEPS = [
   { delay: 0, text: '解析行动中...' },

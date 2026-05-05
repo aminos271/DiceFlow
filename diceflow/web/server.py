@@ -4,6 +4,8 @@ import yaml
 from pathlib import Path
 from typing import Any
 
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -61,6 +63,32 @@ class UpdateSessionRequest(BaseModel):
 
 class UpdateEntityRequest(BaseModel):
     patch: dict[str, Any]
+
+
+class LoreEntryCreate(BaseModel):
+    type: Literal["world", "character", "event"]
+    title: str = Field(min_length=1, max_length=80)
+    aliases: list[str] = Field(default_factory=list)
+    summary: str = ""
+    content: str = ""
+    tags: list[str] = Field(default_factory=list)
+    pinned: bool = False
+    discovered: bool = False
+    linked_entity_id: str | None = None
+    linked_turn_ids: list[int] = Field(default_factory=list)
+
+
+class LoreEntryUpdate(BaseModel):
+    type: Literal["world", "character", "event"] | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    aliases: list[str] | None = None
+    summary: str | None = None
+    content: str | None = None
+    tags: list[str] | None = None
+    pinned: bool | None = None
+    discovered: bool | None = None
+    linked_entity_id: str | None = None
+    linked_turn_ids: list[int] | None = None
 
 
 class StatusData(BaseModel):
@@ -161,6 +189,73 @@ def update_entity(session_id: str, entity_id: str, body: UpdateEntityRequest) ->
         raise HTTPException(status_code=404, detail=f"entity not found: {entity_id}") from None
     store.save_to_disk(session)
     return {"entity": _entity_record(session, entity_id, session.game.state.entities[entity_id])}
+
+
+# ── Lorebook endpoints ─────────────────────────────────────────────
+
+
+@app.get("/api/sessions/{session_id}/lorebook")
+def get_lorebook(session_id: str) -> dict[str, Any]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    return {"entries": session.lorebook.to_dict()}
+
+
+@app.post("/api/sessions/{session_id}/lorebook")
+def create_lore_entry(session_id: str, body: LoreEntryCreate) -> dict[str, Any]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    # Validate linked_entity_id references a real entity if set
+    _validate_linked_entity(session, body.linked_entity_id)
+    entry = session.lorebook.create_entry(
+        type=body.type,
+        title=body.title,
+        aliases=body.aliases,
+        summary=body.summary,
+        content=body.content,
+        tags=body.tags,
+        pinned=body.pinned,
+        discovered=body.discovered,
+        linked_entity_id=body.linked_entity_id,
+        linked_turn_ids=body.linked_turn_ids,
+    )
+    store.save_to_disk(session)
+    return {"entry": entry.to_dict()}
+
+
+@app.patch("/api/sessions/{session_id}/lorebook/{entry_id}")
+def update_lore_entry(session_id: str, entry_id: str, body: LoreEntryUpdate) -> dict[str, Any]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    # Use exclude_unset so that explicit null values (e.g. linked_entity_id=null)
+    # are passed through instead of being dropped by exclude_none.
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="no fields to update")
+    if "linked_entity_id" in fields:
+        _validate_linked_entity(session, fields.get("linked_entity_id"))
+    entry = session.lorebook.update_entry(entry_id, **fields)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"lore entry not found: {entry_id}")
+    store.save_to_disk(session)
+    return {"entry": entry.to_dict()}
+
+
+@app.delete("/api/sessions/{session_id}/lorebook/{entry_id}")
+def delete_lore_entry(session_id: str, entry_id: str) -> dict[str, str]:
+    session = store.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"session not found: {session_id}")
+    if not session.lorebook.delete_entry(entry_id):
+        raise HTTPException(status_code=404, detail=f"lore entry not found: {entry_id}")
+    store.save_to_disk(session)
+    return {"status": "deleted", "entry_id": entry_id}
+
+
+# ── Session lifecycle ──────────────────────────────────────────────
 
 
 @app.delete("/api/sessions/{session_id}")
@@ -536,6 +631,17 @@ def _editable_entity_error(session, entity_id: str, ent: dict[str, Any]) -> str 
     if turns_since is None or turns_since < 3:
         return "该实体距离上次互动不足 3 回合，暂不可编辑"
     return None
+
+
+def _validate_linked_entity(session, linked_entity_id: str | None) -> None:
+    """Raise 422 if linked_entity_id is non-null and not a known entity."""
+    if linked_entity_id is None:
+        return
+    if linked_entity_id not in session.game.state.entities:
+        raise HTTPException(
+            status_code=422,
+            detail=f"linked_entity_id references unknown entity: {linked_entity_id}",
+        )
 
 
 def _help_text() -> str:
