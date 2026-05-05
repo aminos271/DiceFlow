@@ -14,11 +14,9 @@ def update_state(action: Action, check: CheckResult, state: GameState) -> StateC
     action_spec = resolve_action_spec(action, state)
     outcomes = action_spec.get("outcomes", {})
 
-    if result in outcomes:
-        changes = _expand_placeholders(outcomes[result], action, state)
-        return derive_state_changes(action, check, changes, state)
-    if "fail" in outcomes:
-        changes = _expand_placeholders(outcomes["fail"], action, state)
+    outcome_key = _resolve_outcome_key(result, outcomes)
+    if outcome_key:
+        changes = _expand_placeholders(outcomes[outcome_key], action, state)
         return derive_state_changes(action, check, changes, state)
 
     changes = {
@@ -26,6 +24,19 @@ def update_state(action: Action, check: CheckResult, state: GameState) -> StateC
         "events": [str(state.script.get("default_no_outcome_event", "行动没有产生明确结果，但局势继续推进。"))],
     }
     return derive_state_changes(action, check, changes, state)
+
+
+def _resolve_outcome_key(result: str, outcomes: dict[str, object]) -> str:
+    if result in outcomes:
+        return result
+    fallback_order = {
+        "critical_success": ("success",),
+        "critical_fail": ("fail",),
+    }.get(result, ())
+    for key in fallback_order:
+        if key in outcomes:
+            return key
+    return ""
 
 
 def _expand_placeholders(changes: StateChanges, action: Action, state: GameState) -> StateChanges:

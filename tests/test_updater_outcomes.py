@@ -42,6 +42,19 @@ class UpdaterOutcomesTest(unittest.TestCase):
         self.assertIn("guard_1", changes["entities"])
         self.assertNotIn("$target", changes["entities"])
 
+    def test_critical_success_falls_back_to_success_outcome(self) -> None:
+        game = Game(script=load_script("border_town_campaign"), use_llm=False)
+        action = {"type": "inspect", "target": "酒馆老板", "method": "", "tool": ""}
+        result = validate(action, game.state)
+        self.assertTrue(result["valid"])
+        action = result.get("_normalized_action", action)
+
+        changes = update_state(action, {"result": "critical_success"}, game.state)
+
+        self.assertNotIn("player", changes)
+        self.assertIn("events", changes)
+        self.assertIn("老板", changes["events"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -200,7 +200,7 @@ def print_intro(state: GameState) -> None:
     print(state.script.get("intro", "DiceFlow MVP。输入 q/quit/退出 结束。"))
 
 
-def run_cli(script_name: str = "tomb_entrance", use_llm: bool = True, debug: bool = True) -> None:
+def run_cli(script_name: str = "border_town_campaign", use_llm: bool = True, debug: bool = True) -> None:
     game = Game(script=load_script(script_name), use_llm=use_llm)
     print_intro(game.state)
 

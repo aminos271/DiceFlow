@@ -31,7 +31,7 @@ DEEPSEEK_API_URL=https://api.deepseek.com/v1
 ### CLI 模式
 
 ```bash
-# 默认剧本（古墓入口），启用 LLM
+# 默认剧本（边境小镇远征），启用 LLM
 python main.py
 
 # 指定剧本

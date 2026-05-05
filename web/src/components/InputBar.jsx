@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 
-export default function InputBar({ onSend, onOpenPanel, disabled, pendingStatus, gameOver }) {
-  const [text, setText] = useState('')
+export default function InputBar({ onSend, onOpenPanel, value, onChange, focusToken, disabled, pendingStatus, gameOver }) {
+  const inputRef = useRef(null)
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!text.trim() || disabled) return
-    onSend(text.trim())
-    setText('')
+    if (!value.trim() || disabled) return
+    onSend(value.trim())
   }
+
+  useEffect(() => {
+    if (focusToken > 0 && inputRef.current && !disabled && !gameOver) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [focusToken, disabled, gameOver])
 
   if (gameOver) {
     return (
@@ -28,14 +34,15 @@ export default function InputBar({ onSend, onOpenPanel, disabled, pendingStatus,
       )}
       <form className="input-bar" onSubmit={handleSubmit}>
         <input
+          ref={inputRef}
           type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           placeholder={disabled ? pendingStatus || '处理中...' : '输入行动...'}
           disabled={disabled}
           autoFocus
         />
-        <button type="submit" className="btn-send" disabled={disabled || !text.trim()}>
+        <button type="submit" className="btn-send" disabled={disabled || !value.trim()}>
           发送
         </button>
         <div className="meta-buttons">

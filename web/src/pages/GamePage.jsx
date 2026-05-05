@@ -20,6 +20,8 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const [pendingStatus, setPendingStatus] = useState('')
   const [selectedEntity, setSelectedEntity] = useState(null)
   const [panel, setPanel] = useState(null) // { type: 'skills'|'status'|'backpack' }
+  const [inputDraft, setInputDraft] = useState('')
+  const [inputFocusToken, setInputFocusToken] = useState(0)
   const timersRef = useRef([])
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
       const data = await runTurn(sessionId, input)
       clearTimers()
       setPendingStatus('')
+      setInputDraft('')
       setTurns((prev) => [...prev, data.turn])
       setStatus(data.status || null)
       if (data.is_game_over) {
@@ -106,6 +109,12 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     }
   }, [status?.known_entities])
 
+  const handlePickHint = useCallback((command) => {
+    if (!command || sending || isGameOver) return
+    setInputDraft(command)
+    setInputFocusToken(token => token + 1)
+  }, [sending, isGameOver])
+
   const endingLabel = (e) => {
     if (!e) return ''
     if (e === 'victory') return '胜利！'
@@ -132,6 +141,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
           onSelectEntity={handleSelectEntity}
           sessionId={sessionId}
           onEditEntity={handleEntityEdit}
+          onPickHint={handlePickHint}
         />
       </div>
 
@@ -144,6 +154,9 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
         <InputBar
           onSend={handleSend}
           onOpenPanel={handleOpenPanel}
+          value={inputDraft}
+          onChange={setInputDraft}
+          focusToken={inputFocusToken}
           disabled={sending}
           pendingStatus={pendingStatus}
           gameOver={isGameOver}

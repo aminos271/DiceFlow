@@ -34,7 +34,7 @@ function DetailRow({ label, value }) {
   )
 }
 
-function HintGroups({ status }) {
+function HintGroups({ status, onPickHint }) {
   const groups = status.hint_groups || {}
   const labels = {
     recommended: '推荐行动',
@@ -46,7 +46,14 @@ function HintGroups({ status }) {
   if (orderedKeys.length === 0) {
     return status.hints && status.hints.length > 0 ? (
       status.hints.map((hint, i) => (
-        <div key={i} className="hint-item">💡 {hint}</div>
+        <button
+          key={i}
+          type="button"
+          className="hint-item hint-button"
+          onClick={() => onPickHint?.(`我想${hint}。`)}
+        >
+          💡 {hint}
+        </button>
       ))
     ) : (
       <div className="inv-empty">暂无提示</div>
@@ -57,10 +64,16 @@ function HintGroups({ status }) {
     <div key={key} className={`hint-group hint-group-${key}`}>
       <div className="hint-group-title">{labels[key]}</div>
       {groups[key].map((hint, i) => (
-        <div key={`${key}-${i}`} className="hint-item rich-hint">
+        <button
+          key={`${key}-${i}`}
+          type="button"
+          className="hint-item rich-hint hint-button"
+          onClick={() => onPickHint?.(hint.command || hint.label)}
+          title="填入输入框"
+        >
           <div className="hint-label">{hint.label}</div>
           {hint.detail && <div className="hint-detail">{hint.detail}</div>}
-        </div>
+        </button>
       ))}
     </div>
   ))
@@ -246,7 +259,7 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   )
 }
 
-export default function StatusSidebar({ status, selectedEntity, onSelectEntity, sessionId, onEditEntity }) {
+export default function StatusSidebar({ status, selectedEntity, onSelectEntity, sessionId, onEditEntity, onPickHint }) {
   const [expanded, setExpanded] = useState({
     status: true,
     backpack: true,
@@ -373,7 +386,7 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
         expanded={expanded.hints}
         onToggle={() => toggleSection('hints')}
       >
-        <HintGroups status={status} />
+        <HintGroups status={status} onPickHint={onPickHint} />
       </AccordionSection>
 
       {selectedEntity && (

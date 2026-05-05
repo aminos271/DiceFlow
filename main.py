@@ -7,7 +7,7 @@ from diceflow.app.cli import run_cli
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="DiceFlow TRPG MVP")
-    parser.add_argument("--script", default="tomb_entrance", help="剧本名称，默认 tomb_entrance")
+    parser.add_argument("--script", default="border_town_campaign", help="剧本名称，默认 border_town_campaign")
     parser.add_argument("--no-llm", action="store_true", help="使用本地保底解析和叙事，不调用 API")
     parser.add_argument("--no-debug", action="store_true", help="隐藏每轮调试日志")
     args = parser.parse_args()
