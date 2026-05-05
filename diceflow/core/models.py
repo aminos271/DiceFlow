@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -19,6 +19,8 @@ class TurnRecord:
     state_changes: StateChanges
     narration: str
     summary: str
+    mechanical_results: list[str] = field(default_factory=list)
+    resolution_card: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -30,5 +32,6 @@ class TurnRecord:
             "state_changes": self.state_changes,
             "narration": self.narration,
             "summary": self.summary,
+            "mechanical_results": self.mechanical_results,
+            "resolution_card": self.resolution_card,
         }
-

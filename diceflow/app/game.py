@@ -46,6 +46,7 @@ class Game:
 
     def run_turn(self, player_input: str) -> TurnRecord:
         turn_id = self.state.advance_turn()
+        before_context = _presentation_context(self.state)
         action = parse_intent(player_input, self.state, self.llm)
         validation = validate(action, self.state)
         action = validation.pop("_normalized_action", action)
@@ -84,6 +85,7 @@ class Game:
                 narration=narration,
                 summary=summary,
             )
+            _attach_turn_presentation(record, before_context, self.state)
             self.state.record_turn(record.to_dict())
             return record
 
@@ -122,6 +124,7 @@ class Game:
                 narration=narration,
                 summary=summary,
             )
+            _attach_turn_presentation(record, before_context, self.state)
             self.state.record_turn(record.to_dict())
             return record
 
@@ -152,6 +155,7 @@ class Game:
                 narration=narration_text,
                 summary=f"无效行动：{validation['reason']}",
             )
+            _attach_turn_presentation(record, before_context, self.state)
             self.state.record_turn(record.to_dict())
             return record
 
@@ -180,6 +184,7 @@ class Game:
             narration=narration,
             summary=summary,
         )
+        _attach_turn_presentation(record, before_context, self.state)
         self.state.record_turn(record.to_dict())
         return record
 
@@ -257,6 +262,199 @@ def _make_summary(action: dict[str, Any], check: dict[str, Any], changes: dict[s
     result = check.get("result", "unknown")
     event = "；".join(changes.get("events", []))
     return f"{action_type} {target} -> {result}。{event}"
+
+
+def _presentation_context(state: GameState) -> dict[str, Any]:
+    return {
+        "player_hp": int(state.player.get("hp", 0)),
+        "hostile_count": len(state.get_hostile_entities()),
+        "entities": {
+            entity_id: {
+                "name": str(entity.get("name") or entity_id),
+                "hp": entity.get("hp"),
+                "alive": bool(entity.get("alive", True)),
+                "hostile": bool(entity.get("hostile") or "hostile" in entity.get("tags", [])),
+                "visible": bool(entity.get("visible", True)),
+                "available": bool(entity.get("available", True)),
+                "locked": bool(entity.get("locked")),
+                "opened": bool(entity.get("opened")),
+            }
+            for entity_id, entity in state.entities.items()
+        },
+    }
+
+
+def _attach_turn_presentation(record: TurnRecord, before: dict[str, Any], state: GameState) -> None:
+    after = _presentation_context(state)
+    record.mechanical_results = _mechanical_results(record, before, after, state)
+    record.resolution_card = _combat_resolution_card(record, before, after, state)
+
+
+def _mechanical_results(
+    record: TurnRecord,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    state: GameState,
+) -> list[str]:
+    check = record.check or {}
+    changes = record.state_changes or {}
+    lines: list[str] = []
+
+    entity_changes = changes.get("entities", {}) if isinstance(changes.get("entities"), dict) else {}
+    set_entity_states = changes.get("set_entity_states", {}) if isinstance(changes.get("set_entity_states"), dict) else {}
+    touched_entities = set(entity_changes) | set(set_entity_states)
+
+    for entity_id in touched_entities:
+        ent_before = before.get("entities", {}).get(entity_id, {})
+        ent_after = after.get("entities", {}).get(entity_id, ent_before)
+        name = str(ent_after.get("name") or ent_before.get("name") or entity_id)
+        delta = 0
+        raw_changes = {}
+        if isinstance(entity_changes.get(entity_id), dict):
+            raw_changes.update(entity_changes[entity_id])
+        if isinstance(set_entity_states.get(entity_id), dict):
+            raw_changes.update(set_entity_states[entity_id])
+        if isinstance(raw_changes.get("hp_delta"), (int, float)):
+            delta = int(raw_changes["hp_delta"])
+        before_hp = ent_before.get("hp")
+        after_hp = ent_after.get("hp")
+        if before_hp is not None and after_hp is not None and before_hp != after_hp:
+            hp_change = int(before_hp) - int(after_hp)
+            if delta < 0:
+                lines.append(f"造成 {max(1, hp_change)} 点伤害")
+            elif delta > 0:
+                lines.append(f"{name} 恢复 {abs(hp_change)} 点生命")
+            lines.append(f"{name} HP：{before_hp} -> {after_hp}")
+        before_alive = bool(ent_before.get("alive", True))
+        after_alive = bool(ent_after.get("alive", True))
+        if before_alive and not after_alive:
+            lines.append(f"{name}死亡")
+        if ent_before.get("visible") is False and ent_after.get("visible") is True:
+            lines.append(f"发现：{name}")
+        if ent_before.get("locked") is True and ent_after.get("locked") is False:
+            lines.append(f"{name}解锁")
+        if ent_before.get("opened") is False and ent_after.get("opened") is True:
+            lines.append(f"{name}打开")
+
+    player_changes = changes.get("player", {}) if isinstance(changes.get("player"), dict) else {}
+    hp_delta = player_changes.get("hp_delta")
+    if isinstance(hp_delta, (int, float)) and hp_delta:
+        before_hp = before.get("player_hp")
+        after_hp = after.get("player_hp")
+        if hp_delta < 0:
+            lines.append(f"你受到 {abs(int(hp_delta))} 点伤害")
+        else:
+            lines.append(f"你恢复 {int(hp_delta)} 点生命")
+        lines.append(f"你的 HP：{before_hp} -> {after_hp}")
+
+    spawns = changes.get("spawn_entities", {}) if isinstance(changes.get("spawn_entities"), dict) else {}
+    if spawns:
+        names = [str(entity.get("name") or entity_id) for entity_id, entity in spawns.items() if isinstance(entity, dict)]
+        if names:
+            lines.append(f"新增实体：{'、'.join(names)}")
+
+    moved = changes.get("move_item_to_inventory", [])
+    if isinstance(moved, list) and moved:
+        names = [_entity_name(str(entity_id), state) for entity_id in moved]
+        lines.append(f"获得：{'、'.join(names)}")
+
+    if before.get("hostile_count") != after.get("hostile_count"):
+        lines.append(f"威胁：{before.get('hostile_count')} -> {after.get('hostile_count')}")
+
+    if not lines and check:
+        result = check.get("result", "unknown")
+        lines.append(f"行动判定结果：{result}")
+    return lines
+
+
+def _combat_resolution_card(
+    record: TurnRecord,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    state: GameState,
+) -> dict[str, Any] | None:
+    if before.get("hostile_count", 0) <= 0 or after.get("hostile_count", 0) != 0:
+        return None
+
+    defeated = [
+        ent_after.get("name") or entity_id
+        for entity_id, ent_after in after.get("entities", {}).items()
+        if before.get("entities", {}).get(entity_id, {}).get("hostile")
+        and before.get("entities", {}).get(entity_id, {}).get("alive", True)
+        and not ent_after.get("alive", True)
+    ]
+    if not defeated:
+        return None
+
+    return {
+        "type": "combat_end",
+        "title": "⚔️ 战斗结束",
+        "outcome": f"{'、'.join(str(name) for name in defeated)}死亡。",
+        "threat_before": before.get("hostile_count", 0),
+        "threat_after": after.get("hostile_count", 0),
+        "scene_changes": _scene_change_lines(record, state),
+        "available_actions": _post_combat_actions(state),
+    }
+
+
+def _scene_change_lines(record: TurnRecord, state: GameState) -> list[str]:
+    changes = record.state_changes or {}
+    lines: list[str] = []
+    spawns = changes.get("spawn_entities", {}) if isinstance(changes.get("spawn_entities"), dict) else {}
+    for entity_id, entity in spawns.items():
+        if not isinstance(entity, dict):
+            continue
+        name = str(entity.get("name") or entity_id)
+        if entity.get("type") == "corpse" or "corpse" in entity.get("tags", []):
+            lines.append(f"{name}倒在门前")
+        else:
+            lines.append(f"{name}出现在场景中")
+    for entity_id, ent in state.get_visible_entities().items():
+        name = str(ent.get("name") or entity_id)
+        if ent.get("type") == "item" or "equipment" in ent.get("tags", []):
+            lines.append(f"{name}掉落在地")
+        if ent.get("locked"):
+            lines.append(f"{name}仍然锁着")
+    scene_desc = str(state.get_current_scene().get("description", ""))
+    if "冷光" in scene_desc and not any("冷光" in line for line in lines):
+        lines.append("门缝里透出冷光")
+    return _dedupe(lines)[:5]
+
+
+def _post_combat_actions(state: GameState) -> list[str]:
+    actions: list[str] = []
+    visible = state.get_visible_entities()
+    for _, ent in visible.items():
+        name = str(ent.get("name") or "目标")
+        tags = set(str(tag) for tag in ent.get("tags", []))
+        if ent.get("type") == "corpse" or "corpse" in tags:
+            actions.append(f"搜索{name}")
+        elif ent.get("type") in {"item", "pickup"} or "equipment" in tags:
+            actions.append(f"捡起{name}")
+        elif ent.get("type") == "door" or "door" in tags:
+            actions.append(f"检查{name}")
+    for item in state.get_inventory_items():
+        if "火把" in item:
+            actions.append("拿火把")
+    return _dedupe(actions)[:6]
+
+
+def _entity_name(entity_id: str, state: GameState) -> str:
+    entity = state.entities.get(entity_id)
+    if isinstance(entity, dict):
+        return str(entity.get("name") or entity_id)
+    return entity_id
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def _suppress_open_ended_fallback_spawn(changes: dict[str, Any], check: dict[str, Any], turn_id: int) -> dict[str, Any]:

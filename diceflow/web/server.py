@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from diceflow.app.game import META_HELP, META_HINT, META_INV, META_LOOK, META_STATUS
 from diceflow.scripting.loader import SCRIPT_DIR
@@ -74,6 +74,7 @@ class StatusData(BaseModel):
     known_entities: list[dict[str, Any]]
     hostile_count: int
     hints: list[str]
+    hint_groups: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
     is_game_over: bool = False
     ending: str | None = None
 
@@ -402,9 +403,65 @@ def _build_status(session) -> StatusData:
         known_entities=_build_known_entities(session),
         hostile_count=hostile_count,
         hints=state.get_available_action_hints() or ["检查周围", "等待/观察局势"],
+        hint_groups=_build_hint_groups(state),
         is_game_over=bool(state.flags.get("game_over")),
         ending=state.flags.get("ending"),
     )
+
+
+def _build_hint_groups(state) -> dict[str, list[dict[str, str]]]:
+    hints = state.get_available_action_hints() or ["检查周围", "等待/观察局势"]
+    groups: dict[str, list[dict[str, str]]] = {"recommended": [], "explore": [], "risky": []}
+    for hint in hints:
+        text = str(hint)
+        detail = _hint_detail(text, state)
+        item = {"label": text, "detail": detail, "command": _hint_command(text, detail)}
+        if _is_risky_hint(text):
+            groups["risky"].append(item)
+        elif _is_explore_hint(text):
+            groups["explore"].append(item)
+        else:
+            groups["recommended"].append(item)
+    return {key: value for key, value in groups.items() if value}
+
+
+def _hint_detail(hint: str, state) -> str:
+    if "尸体" in hint or "搜索" in hint or "搜刮" in hint:
+        return "可能找到钥匙、线索或可用装备"
+    if "盾牌" in hint:
+        return "获得防御能力，解锁格挡动作"
+    if "左门" in hint or "门" in hint:
+        if "打开" in hint or "撬" in hint or "撞" in hint or "强行" in hint:
+            return "速度快，但可能触发陷阱或惊动敌人"
+        return "判断门后风险，确认锁和冷光来源"
+    if "火把" in hint:
+        return "照亮黑暗区域，也可检查暗处或威吓"
+    if "攻击" in hint:
+        return "普通伤害，直接削弱敌人"
+    if "交谈" in hint:
+        return "可能降低敌意，避免继续战斗"
+    if "检查" in hint or "观察" in hint:
+        return "获取弱点、线索或环境信息"
+    if "撤退" in hint or "拉开" in hint:
+        return "脱离压迫，但可能被追击"
+    if state.get_hostile_entities():
+        return "推进当前局势，同时承担战斗风险"
+    return "推进探索并发现新的可互动入口"
+
+
+def _hint_command(hint: str, detail: str) -> str:
+    clean = hint.replace("/", "或")
+    if detail:
+        return f"我想{clean}，{detail}。"
+    return f"我想{clean}。"
+
+
+def _is_risky_hint(hint: str) -> bool:
+    return any(word in hint for word in ("强行", "撞", "撬", "撤退", "逃", "攻击"))
+
+
+def _is_explore_hint(hint: str) -> bool:
+    return any(word in hint for word in ("检查", "观察", "等待", "倾听", "搜索", "搜刮"))
 
 
 def _entity_record(session, entity_id: str, ent: dict[str, Any], journal_entry: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -34,6 +34,38 @@ function DetailRow({ label, value }) {
   )
 }
 
+function HintGroups({ status }) {
+  const groups = status.hint_groups || {}
+  const labels = {
+    recommended: '推荐行动',
+    explore: '探索',
+    risky: '冒险行动',
+  }
+  const orderedKeys = ['recommended', 'explore', 'risky'].filter(key => groups[key]?.length)
+
+  if (orderedKeys.length === 0) {
+    return status.hints && status.hints.length > 0 ? (
+      status.hints.map((hint, i) => (
+        <div key={i} className="hint-item">💡 {hint}</div>
+      ))
+    ) : (
+      <div className="inv-empty">暂无提示</div>
+    )
+  }
+
+  return orderedKeys.map(key => (
+    <div key={key} className={`hint-group hint-group-${key}`}>
+      <div className="hint-group-title">{labels[key]}</div>
+      {groups[key].map((hint, i) => (
+        <div key={`${key}-${i}`} className="hint-item rich-hint">
+          <div className="hint-label">{hint.label}</div>
+          {hint.detail && <div className="hint-detail">{hint.detail}</div>}
+        </div>
+      ))}
+    </div>
+  ))
+}
+
 function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -341,13 +373,7 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
         expanded={expanded.hints}
         onToggle={() => toggleSection('hints')}
       >
-        {status.hints && status.hints.length > 0 ? (
-          status.hints.map((hint, i) => (
-            <div key={i} className="hint-item">💡 {hint}</div>
-          ))
-        ) : (
-          <div className="inv-empty">暂无提示</div>
-        )}
+        <HintGroups status={status} />
       </AccordionSection>
 
       {selectedEntity && (

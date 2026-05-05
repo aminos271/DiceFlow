@@ -116,10 +116,37 @@ class TestRunTurn:
         assert turn["player_input"] == "检查左门"
         assert "action" in turn
         assert "narration" in turn
+        assert "mechanical_results" in turn
+        assert "resolution_card" in turn
 
     def test_run_turn_nonexistent_session(self, isolated_store):
         resp = client.post("/api/sessions/deadbeef1234/turns", json={"input": "检查"})
         assert resp.status_code == 404
+
+    def test_combat_end_turn_has_resolution_card(self, isolated_store):
+        data = _create_session(isolated_store, use_llm=False)
+        sid = data["session_id"]
+        session = isolated_store.get(sid)
+
+        class FixedRoller:
+            def randint(self, _low, _high):
+                return 20
+
+        session.game.rules.rng = FixedRoller()
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "攻击守卫"})
+        resp = client.post(f"/api/sessions/{sid}/turns", json={"input": "攻击守卫"})
+        assert resp.status_code == 200, resp.text
+
+        turn = resp.json()["turn"]
+        assert any("守卫 HP" in item for item in turn["mechanical_results"])
+        assert any("威胁：1 -> 0" == item for item in turn["mechanical_results"])
+        card = turn["resolution_card"]
+        assert card is not None
+        assert card["type"] == "combat_end"
+        assert card["threat_before"] == 1
+        assert card["threat_after"] == 0
+        assert any("尸体" in item for item in card["scene_changes"])
+        assert any("盾牌" in item for item in card["available_actions"])
 
     def test_run_multiple_turns(self, isolated_store):
         data = _create_session(isolated_store)
@@ -345,9 +372,21 @@ class TestStatusData:
         assert "visible_entities" in status
         assert "known_entities" in status
         assert "hints" in status
+        assert "hint_groups" in status
         assert status["hp"] == 10
         assert status["max_hp"] == 10
         assert "短剑" in status["inventory"]
+
+    def test_status_hints_include_benefit_details(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        status = resp.json()["status"]
+        groups = status["hint_groups"]
+        assert groups
+        flat = [item for group in groups.values() for item in group]
+        assert all("label" in item and "detail" in item and "command" in item for item in flat)
+        assert any("普通伤害" in item["detail"] or "门后风险" in item["detail"] for item in flat)
 
     def test_npc_entity_has_social_data(self, isolated_store):
         data = _create_session(isolated_store)

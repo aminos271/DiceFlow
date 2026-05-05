@@ -349,6 +349,30 @@ input:focus {
   background: rgba(244, 67, 54, 0.1);
 }
 
+.mechanical-section {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.mechanical-section .action-label {
+  color: var(--cyan);
+  min-width: 78px;
+}
+
+.mechanical-list {
+  list-style: none;
+  color: var(--text-bright);
+  font-size: 13px;
+  display: grid;
+  gap: 2px;
+}
+
+.mechanical-list li::before {
+  content: '- ';
+  color: var(--text-dim);
+}
+
 .narration-section {
   display: flex;
   align-items: baseline;
@@ -362,6 +386,47 @@ input:focus {
   color: var(--text);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.resolution-card {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 152, 0, 0.45);
+  background: rgba(255, 152, 0, 0.08);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.resolution-title {
+  color: var(--yellow);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.resolution-outcome,
+.resolution-threat,
+.resolution-actions {
+  color: var(--text-bright);
+  margin-top: 3px;
+}
+
+.resolution-subtitle {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.resolution-card ul {
+  list-style: none;
+  margin-top: 2px;
+  display: grid;
+  gap: 2px;
+}
+
+.resolution-card li::before {
+  content: '- ';
+  color: var(--yellow);
 }
 
 /* ── Status Sidebar ────────────────────────────────────────────── */
@@ -553,6 +618,48 @@ input:focus {
   font-size: 12px;
   color: var(--magenta);
   padding: 1px 0;
+}
+
+.hint-group {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.hint-group-title {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.rich-hint {
+  border-left: 2px solid var(--border);
+  padding: 4px 0 4px 8px;
+  color: var(--text);
+}
+
+.hint-group-recommended .rich-hint {
+  border-left-color: var(--green-dim);
+}
+
+.hint-group-explore .rich-hint {
+  border-left-color: var(--cyan);
+}
+
+.hint-group-risky .rich-hint {
+  border-left-color: var(--yellow-dim);
+}
+
+.hint-label {
+  color: var(--text-bright);
+  font-size: 12px;
+}
+
+.hint-detail {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* ── Entity Detail Panel ───────────────────────────────────────── */

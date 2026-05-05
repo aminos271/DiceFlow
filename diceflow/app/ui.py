@@ -77,12 +77,27 @@ def render_turn_result(record: TurnRecord) -> str:
     if check:
         result = str(check.get("result", "unknown"))
         rc = _result_color(result)
-        lines.append(f"\n  {rc}{_result_emoji(result)} {record.summary}{RESET}")
-        lines.append(f"  {DIM}🎲 d20={check.get('roll', '?')} / DC {check.get('dc', '?')}  {rc}{result_label(result)}{RESET}")
+        lines.append(f"\n  {rc}{_result_emoji(result)} 回合 {record.turn_id}｜{record.player_input}{RESET}")
+        lines.append(f"  {DIM}🎲 判定：d20={check.get('roll', '?')} / DC {check.get('dc', '?')}  {rc}{result_label(result)}{RESET}")
     else:
         lines.append(f"\n  {RED}⛔ 无效行动 | {record.validation.get('reason', '未知')}{RESET}")
+    if record.mechanical_results:
+        lines.append(f"  {WHITE}⚙️ 机械结果{RESET}")
+        lines.extend(f"    - {item}" for item in record.mechanical_results)
     if record.narration:
         lines.extend([f"  {DIM}📖 {record.narration}{RESET}"])
+    if record.resolution_card:
+        card = record.resolution_card
+        lines.append(f"  {GREEN}{card.get('title', '战斗结束')}{RESET}")
+        lines.append(f"    {card.get('outcome', '')}")
+        lines.append(f"    威胁等级：{card.get('threat_before')} -> {card.get('threat_after')}")
+        scene_changes = card.get("scene_changes") or []
+        if scene_changes:
+            lines.append("    场景变化：")
+            lines.extend(f"    - {item}" for item in scene_changes)
+        actions = card.get("available_actions") or []
+        if actions:
+            lines.append(f"    你现在可以：{' / '.join(actions)}")
     return "\n".join(lines)
 
 
