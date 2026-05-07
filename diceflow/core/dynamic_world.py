@@ -118,7 +118,10 @@ def _generate_world_patch(
     llm: Any | None,
 ) -> object:
     if llm and hasattr(llm, "generate_dynamic_world"):
-        return llm.generate_dynamic_world(_world_contract(state), action, validation, state)
+        try:
+            return llm.generate_dynamic_world(_world_contract(state), action, validation, state)
+        except Exception as exc:
+            LOGGER.warning("dynamic world llm unavailable, using fallback patch: %s", exc)
     return _fallback_world_patch(action, state)
 
 

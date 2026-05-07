@@ -93,6 +93,7 @@ class LLMClient:
         self.dynamic_world_prompt = (PROMPT_DIR / "dynamic_world_generator.txt").read_text(encoding="utf-8")
         self.open_ended_content_prompt = (PROMPT_DIR / "open_ended_content.txt").read_text(encoding="utf-8")
         self.npc_autonomy_prompt = (PROMPT_DIR / "npc_autonomy.txt").read_text(encoding="utf-8")
+        self.director_mode_prompt = (PROMPT_DIR / "director_mode.txt").read_text(encoding="utf-8")
 
     # ── Intent / Adjudication (use intent_client) ────────────────────
 
@@ -149,7 +150,7 @@ class LLMClient:
         return self._narration_chat(
             [
                 {"role": "system", "content": "你只输出叙事正文。"},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": self._with_director_mode(prompt)},
             ],
         ).strip()
 
@@ -213,17 +214,19 @@ class LLMClient:
                 {"role": "system", "content": self.dynamic_world_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "world": world,
-                            "scene": state.scene,
-                            "action": action,
-                            "validation": validation,
-                            "state": _compact_state(state),
-                            "existing_scene_actions": list(state.script.get("scene_actions", {})),
-                            "existing_entity_ids": list(state.entities),
-                        },
-                        ensure_ascii=False,
+                    "content": self._with_director_mode(
+                        json.dumps(
+                            {
+                                "world": world,
+                                "scene": state.scene,
+                                "action": action,
+                                "validation": validation,
+                                "state": _compact_state(state),
+                                "existing_scene_actions": list(state.script.get("scene_actions", {})),
+                                "existing_entity_ids": list(state.entities),
+                            },
+                            ensure_ascii=False,
+                        )
                     ),
                 },
             ],
@@ -244,19 +247,21 @@ class LLMClient:
                 {"role": "system", "content": self.open_ended_content_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "world": world,
-                            "scene": state.scene,
-                            "action": action,
-                            "check": check,
-                            "result_quality": result_quality,
-                            "state": _compact_state(state),
-                            "allowed_entity_types": world["allowed_entity_types"],
-                            "max_dc": world["max_runtime_dc"],
-                            "existing_entity_ids": list(state.entities),
-                        },
-                        ensure_ascii=False,
+                    "content": self._with_director_mode(
+                        json.dumps(
+                            {
+                                "world": world,
+                                "scene": state.scene,
+                                "action": action,
+                                "check": check,
+                                "result_quality": result_quality,
+                                "state": _compact_state(state),
+                                "allowed_entity_types": world["allowed_entity_types"],
+                                "max_dc": world["max_runtime_dc"],
+                                "existing_entity_ids": list(state.entities),
+                            },
+                            ensure_ascii=False,
+                        )
                     ),
                 },
             ],
@@ -276,18 +281,20 @@ class LLMClient:
                 {"role": "system", "content": self.dynamic_content_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "scene": state.scene,
-                            "action": action,
-                            "check": check,
-                            "prompt_hint": hook.get("prompt_hint", ""),
-                            "allowed_entity_types": hook.get("allowed_entity_types", []),
-                            "max_dc": hook.get("max_dc", 15),
-                            "existing_entity_ids": list(state.entities),
-                            "state": _compact_state(state),
-                        },
-                        ensure_ascii=False,
+                    "content": self._with_director_mode(
+                        json.dumps(
+                            {
+                                "scene": state.scene,
+                                "action": action,
+                                "check": check,
+                                "prompt_hint": hook.get("prompt_hint", ""),
+                                "allowed_entity_types": hook.get("allowed_entity_types", []),
+                                "max_dc": hook.get("max_dc", 15),
+                                "existing_entity_ids": list(state.entities),
+                                "state": _compact_state(state),
+                            },
+                            ensure_ascii=False,
+                        )
                     ),
                 },
             ],
@@ -307,16 +314,18 @@ class LLMClient:
                 {"role": "system", "content": self.npc_autonomy_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "visible_npcs": visible_npcs,
-                            "player_action": action,
-                            "player_hp": state.player.get("hp", 0),
-                            "scene": state.scene,
-                            "recent_events": state.recent_events,
-                            "turn_id": state.turn_id,
-                        },
-                        ensure_ascii=False,
+                    "content": self._with_director_mode(
+                        json.dumps(
+                            {
+                                "visible_npcs": visible_npcs,
+                                "player_action": action,
+                                "player_hp": state.player.get("hp", 0),
+                                "scene": state.scene,
+                                "recent_events": state.recent_events,
+                                "turn_id": state.turn_id,
+                            },
+                            ensure_ascii=False,
+                        )
                     ),
                 },
             ],
@@ -345,6 +354,9 @@ class LLMClient:
             **kwargs,
         )
         return response.choices[0].message.content or ""
+
+    def _with_director_mode(self, content: str) -> str:
+        return f"{content}\n\n{self.director_mode_prompt}"
 
     # Backward-compatible alias
     _chat = _narration_chat
