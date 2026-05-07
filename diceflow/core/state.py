@@ -20,7 +20,9 @@ from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, mater
 
 
 class GameState:
-    def __init__(self, script: Script) -> None:
+    def __init__(self, script: Script | object) -> None:
+        # Accept WorldBootstrap and convert to script dict
+        script = _ensure_script_dict(script)
         self.base_script = deepcopy(script)
         self.script = deepcopy(script)
         self.script_patches: list[RuntimeScriptPatch] = []
@@ -343,5 +345,20 @@ class GameState:
         return True
 
 
+def _ensure_script_dict(script: object) -> dict[str, Any]:
+    """Convert a WorldBootstrap to a script dict if needed, materializing entities."""
+    # If it's already a script dict (has schema_version), use as-is
+    if isinstance(script, dict) and "schema_version" in script:
+        return script  # type: ignore[return-value]
+    # Otherwise, assume it's a WorldBootstrap
+    if hasattr(script, "to_script_dict"):
+        script_dict = script.to_script_dict()  # type: ignore[union-attr]
+        # Materialize entities through archetypes so they get full defaults
+        script_dict["entities"] = {
+            entity_id: materialize_entity(entity, entity_id)
+            for entity_id, entity in script_dict.get("entities", {}).items()
+        }
+        return script_dict
+    raise TypeError(f"expected Script dict or WorldBootstrap, got {type(script).__name__}")
 
 

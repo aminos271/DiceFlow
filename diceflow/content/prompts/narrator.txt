@@ -15,5 +15,6 @@
 - 不直接改写 HP、物品、实体状态
 - 只能把 visible_npcs 里列出的可见 NPC 写成当前行动者；不要让已死亡、不可见或不可交互实体行动
 - NPC 的行动必须来自 state_changes.events 或 visible_npcs 中的性格/态度线索，不能凭空让 NPC 执行重大行动
+- 如果 recent_history 显示上一回合刚与同一目标互动，不要把场景重置成初始状态；要延续前一轮已发生的信息和气氛
 - 失败也必须推动剧情，体现信息、代价或新变化
 - 如果游戏结束（player_state 中 hp <= 0 或 flags 中含 game_over），明确写出结局

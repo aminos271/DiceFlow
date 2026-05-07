@@ -114,6 +114,17 @@ input:focus {
   overflow: hidden;
 }
 
+.world-badge {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--cyan);
+  background: rgba(0, 188, 212, 0.12);
+  border: 1px solid rgba(0, 188, 212, 0.3);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
 /* ── Continue Playing ──────────────────────────────────────────── */
 .continue-section {
   margin-bottom: 32px;
@@ -794,6 +805,30 @@ input:focus {
 .input-bar .btn-send:disabled {
   background: var(--border);
   color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.input-bar .btn-force-crit {
+  background: rgba(255, 152, 0, 0.12);
+  color: var(--yellow);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  padding: 8px 12px;
+  font-weight: 700;
+}
+
+.input-bar .btn-force-crit:hover:not(:disabled) {
+  background: rgba(255, 152, 0, 0.18);
+  border-color: rgba(255, 152, 0, 0.55);
+}
+
+.input-bar .btn-force-crit.armed {
+  background: rgba(255, 152, 0, 0.24);
+  color: #ffd180;
+  box-shadow: 0 0 0 1px rgba(255, 152, 0, 0.25) inset;
+}
+
+.input-bar .btn-force-crit:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

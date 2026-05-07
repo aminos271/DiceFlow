@@ -27,8 +27,10 @@ class TurnResolution(TypedDict, total=False):
     reason_tags: list[str]
     visible_npcs: dict[str, dict[str, Any]]
     recent_events: list[str]
+    recent_history: list[dict[str, Any]]
     scene: dict[str, Any]
     player_state: dict[str, Any]
+    lorebook_entries: list[dict[str, Any]]
 
 
 @dataclass

@@ -166,6 +166,16 @@ class SessionLore:
             or self.character_entries or self.event_entries
         )
 
+    def seed_from_world_content_for_id(self, world_id: str) -> None:
+        """Seed lorebook from world content by ID. Idempotent."""
+        if self._is_seeded():
+            return
+        if world_id and world_exists(world_id):
+            world_content = load_world_content(world_id)
+            if world_content:
+                self.seed_from_world_content(world_content, {})
+                return
+
     def seed_from_script(self, script: dict) -> None:
         """Populate lorebook from script data. Prefers world content
         via world_id, falls back to inline script fields. Idempotent."""

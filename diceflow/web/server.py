@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from diceflow.app.game import META_HELP, META_HINT, META_INV, META_LOOK, META_STATUS
+from diceflow.content.worlds.loader import WORLDS_DIR, load_world_meta, world_exists
 from diceflow.scripting.loader import SCRIPT_DIR
 from diceflow.web import SessionStore
 
@@ -29,16 +30,25 @@ store = SessionStore()
 # ── Request/Response models ───────────────────────────────────────────
 
 class CreateSessionRequest(BaseModel):
-    script_id: str
+    script_id: str | None = None
+    world_id: str | None = None
     use_llm: bool = True
 
 
 class TurnRequest(BaseModel):
     input: str
+    force_critical: bool = False
+    forced_roll: int | None = None
 
 
 class MetaRequest(BaseModel):
     command: str
+
+
+class WorldInfo(BaseModel):
+    id: str
+    title: str
+    description: str
 
 
 class ScriptInfo(BaseModel):
@@ -49,7 +59,8 @@ class ScriptInfo(BaseModel):
 
 class SessionSummary(BaseModel):
     session_id: str
-    script_id: str
+    script_id: str | None = None
+    world_id: str | None = None
     display_name: str = ""
     created_at: str
     updated_at: str
@@ -129,15 +140,44 @@ def list_scripts() -> list[ScriptInfo]:
     return scripts
 
 
+@app.get("/api/worlds")
+def list_worlds() -> list[WorldInfo]:
+    worlds: list[WorldInfo] = []
+    if not WORLDS_DIR.is_dir():
+        return worlds
+    # Always include default bootstrap
+    worlds.append(WorldInfo(
+        id="_default",
+        title="边境旅店",
+        description="温暖的炉火、吧台后的旅店老板、各路冒险者的故事——从这里开始你的旅程。",
+    ))
+    for world_dir in sorted(WORLDS_DIR.iterdir()):
+        if not world_dir.is_dir() or world_dir.name.startswith("_"):
+            continue
+        world_id = world_dir.name
+        if not world_exists(world_id):
+            continue
+        meta = load_world_meta(world_id)
+        if meta:
+            worlds.append(WorldInfo(
+                id=str(meta.get("id") or world_id),
+                title=str(meta.get("title") or world_id),
+                description=str(meta.get("description") or ""),
+            ))
+    return worlds
+
+
 @app.post("/api/sessions")
 def create_session(body: CreateSessionRequest) -> dict[str, Any]:
-    script_path = SCRIPT_DIR / f"{body.script_id}.yaml"
-    if not script_path.exists():
-        raise HTTPException(status_code=404, detail=f"script not found: {body.script_id}")
-    session = store.create(body.script_id, use_llm=body.use_llm)
+    if body.script_id:
+        script_path = SCRIPT_DIR / f"{body.script_id}.yaml"
+        if not script_path.exists():
+            raise HTTPException(status_code=404, detail=f"script not found: {body.script_id}")
+    session = store.create(script_id=body.script_id, world_id=body.world_id, use_llm=body.use_llm)
     return {
         "session_id": session.session_id,
         "script_id": session.script_id,
+        "world_id": session.world_id,
         "display_name": session.display_name,
         "created_at": session.created_at,
     }
@@ -283,7 +323,13 @@ def run_turn(session_id: str, body: TurnRequest) -> dict[str, Any]:
     if state.flags.get("game_over"):
         raise HTTPException(status_code=400, detail="game is already over")
 
-    record = session.game.run_turn(body.input)
+    if body.forced_roll is not None:
+        forced_roll = body.forced_roll
+    elif body.force_critical:
+        forced_roll = 20
+    else:
+        forced_roll = None
+    record = session.game.run_turn(body.input, forced_roll=forced_roll)
     session.turn_history.append(record.to_dict())
     store.save_to_disk(session)
 

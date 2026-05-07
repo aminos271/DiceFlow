@@ -10,7 +10,14 @@ from diceflow.core.state import GameState
 def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
     from diceflow.core.adjudicator import _sanitize_assessment
 
-    method = str(action.get("method_text") or action.get("method") or "").lower()
+    method = " ".join(
+        part for part in (
+            str(action.get("raw_input") or "").strip(),
+            str(action.get("method_text") or "").strip(),
+            str(action.get("method") or "").strip(),
+        )
+        if part
+    ).lower()
     family = action_family(action)
     target = state.entities.get(str(action.get("target_id") or ""), {})
     target_hostile = bool(target.get("hostile") or "hostile" in target.get("tags", []))
@@ -23,6 +30,19 @@ def _heuristic_assessment(action: Action, state: GameState) -> dict[str, str]:
                 "difficulty": "impossible",
                 "risk": "high",
                 "intent_kind": "improvised",
+            }
+        )
+
+    # Open-ended social check BEFORE discover — inputs like "打听有没有活计"
+    # should be social, not confused by "有没有" in DISCOVER_KEYWORDS.
+    # Only strong social keywords here; "线索" is handled by discover below.
+    if any(term in method for term in ["招募", "同伴", "队友", "结伴", "推荐", "打听", "消息", "活计", "活儿", "流言", "传闻", "同伙", "旅伴", "伙伴", "帮手", "同行", "一起去", "一起"]):
+        return _sanitize_assessment(
+            {
+                "plausibility": "reasonable",
+                "difficulty": "medium",
+                "risk": "low",
+                "intent_kind": "social",
             }
         )
 
@@ -110,12 +130,14 @@ def _success_changes(
     events = [f"你的行动产生了效果。"]
 
     if intent_kind in {"deception", "social"}:
-        entities[target_id]["hostile"] = False
+        if target_id and target_id in entities:
+            entities[target_id]["hostile"] = False
         flags["dynamic_distraction_created"] = True
         events = [f"对方的态度明显松动。"]
     elif intent_kind == "stealth":
+        if target_id and target_id in entities:
+            entities[target_id]["line_of_sight_blocked"] = True
         flags["dynamic_path_opened"] = True
-        entities[target_id]["line_of_sight_blocked"] = True
         events = [f"环境中出现了一个短暂的窗口。"]
     elif intent_kind == "discover":
         return {

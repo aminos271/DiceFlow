@@ -25,27 +25,37 @@ from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.dynamic_world import dynamic_world_phase
 from diceflow.core.models import TurnRecord, TurnResolution
 from diceflow.core.npc_autonomy import NPC_AUTONOMY_ENABLED, npc_autonomy_phase, record_autonomy_turn
+from diceflow.core.open_ended_content import open_ended_content_phase
 from diceflow.core.reaction import merge_state_changes, reaction_phase
 from diceflow.core.rules import RuleEngine
 from diceflow.core.state import GameState
 from diceflow.core.updater import update_state
 from diceflow.core.validator import validate
 from diceflow.llm.client import LLMClient, narrate, parse_intent
+from diceflow.core.bootstrap import WorldBootstrap
 from diceflow.scripting.loader import Script, load_script
 
 
 class Game:
-    def __init__(self, script: Script, use_llm: bool = True) -> None:
+    def __init__(self, script: Script | WorldBootstrap, use_llm: bool = True, lorebook: Any | None = None) -> None:
+        if isinstance(script, WorldBootstrap):
+            script = script.to_script_dict()
         self.script = script
         self.state = GameState(self.script)
         self.rules = RuleEngine()
         self.adjudicator = DynamicAdjudicator()
         self.llm = self._build_llm() if use_llm else None
+        self.lorebook = lorebook  # SessionLore | None, set by web layer
 
-    def run_turn(self, player_input: str) -> TurnRecord:
+    def run_turn(self, player_input: str, forced_roll: int | None = None) -> TurnRecord:
         turn_id = self.state.advance_turn()
         before_context = _presentation_context(self.state)
         action = parse_intent(player_input, self.state, self.llm)
+        action.setdefault("raw_input", player_input)
+        if not str(action.get("method_text") or "").strip():
+            action["method_text"] = player_input
+        if not str(action.get("method") or "").strip():
+            action["method"] = player_input
         validation = validate(action, self.state)
         action = validation.pop("_normalized_action", action)
         validation.pop("_implied_spawn_applied", None)  # consumed by validate()
@@ -72,6 +82,7 @@ class Game:
                 resolution_kind="transition_attempt",
                 reason_tags=["world_transition_attempt"],
                 state=self.state,
+                lorebook=self.lorebook,
             )
             narration_text = narrate(turn_resolution, self.state, self.llm)
             summary = _make_summary(action, check, world_changes)
@@ -96,12 +107,16 @@ class Game:
         # ── Branch: Dynamic adjudication ────────────────────────────
         if self.adjudicator.can_adjudicate(action, validation, self.state):
             assessment = self.adjudicator.assess(action, self.state, self.llm)
-            check = self.adjudicator.resolve(assessment)
+            check = self.adjudicator.resolve(assessment, forced_roll=forced_roll)
             changes = self.adjudicator.update_state(action, check, self.state)
             self.state.apply_changes(changes)
             reaction_changes = reaction_phase(action, check, changes, self.state)
             self.state.apply_changes(reaction_changes)
             turn_changes = merge_state_changes(changes, reaction_changes)
+            open_ended_changes = open_ended_content_phase(action, check, turn_changes, self.state, self.llm)
+            self.state.apply_changes(open_ended_changes)
+            _sync_lorebook_for_patch(self.lorebook, open_ended_changes, turn_id)
+            turn_changes = merge_state_changes(turn_changes, open_ended_changes)
             reason_tags = list(assessment.get("reason_tags", []))
             turn_resolution = build_turn_resolution(
                 turn_id=turn_id,
@@ -113,6 +128,7 @@ class Game:
                 resolution_kind="dynamic_adjudication",
                 reason_tags=reason_tags,
                 state=self.state,
+                lorebook=self.lorebook,
             )
             narration_text = narrate(turn_resolution, self.state, self.llm)
             summary = _make_summary(action, check, turn_changes)
@@ -153,6 +169,7 @@ class Game:
                 resolution_kind="invalid",
                 reason_tags=[],
                 state=self.state,
+                lorebook=self.lorebook,
             )
             narration_text = narrate(turn_resolution, self.state, self.llm)
             record = TurnRecord(
@@ -170,12 +187,16 @@ class Game:
             return record
 
         # ── Branch: Standard resolution ─────────────────────────────
-        check = self.rules.resolve(action, self.state)
+        check = self.rules.resolve(action, self.state, forced_roll=forced_roll)
         changes = update_state(action, check, self.state)
         self.state.apply_changes(changes)
         reaction_changes = reaction_phase(action, check, changes, self.state)
         self.state.apply_changes(reaction_changes)
         turn_changes = merge_state_changes(changes, reaction_changes)
+        open_ended_changes = open_ended_content_phase(action, check, turn_changes, self.state, self.llm)
+        self.state.apply_changes(open_ended_changes)
+        _sync_lorebook_for_patch(self.lorebook, open_ended_changes, turn_id)
+        turn_changes = merge_state_changes(turn_changes, open_ended_changes)
         turn_resolution = build_turn_resolution(
             turn_id=turn_id,
             player_input=player_input,
@@ -186,6 +207,7 @@ class Game:
             resolution_kind="standard",
             reason_tags=[],
             state=self.state,
+            lorebook=self.lorebook,
         )
         narration_text = narrate(turn_resolution, self.state, self.llm)
         summary = _make_summary(action, check, turn_changes)
@@ -216,8 +238,20 @@ def print_intro(state: GameState) -> None:
     print(state.script.get("intro", "DiceFlow MVP。输入 q/quit/退出 结束。"))
 
 
-def run_cli(script_name: str = "border_town_campaign", use_llm: bool = True, debug: bool = True) -> None:
-    game = Game(script=load_script(script_name), use_llm=use_llm)
+def run_cli(script_name: str | None = None, world_id: str | None = None, use_llm: bool = True, debug: bool = True) -> None:
+    if script_name:
+        game = Game(script=load_script(script_name), use_llm=use_llm)
+    elif world_id:
+        from diceflow.core.bootstrap import bootstrap_from_defaults, bootstrap_from_lorebook
+        from diceflow.core.lorebook import SessionLore
+        lorebook = SessionLore()
+        lorebook.seed_from_world_content_for_id(world_id)
+        bootstrap = bootstrap_from_lorebook(lorebook, world_id) or bootstrap_from_defaults(world_id)
+        game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
+    else:
+        # Default: use built-in bootstrap
+        from diceflow.core.bootstrap import bootstrap_from_defaults
+        game = Game(script=bootstrap_from_defaults(), use_llm=use_llm)
     print_intro(game.state)
 
     while not game.state.flags.get("game_over"):
@@ -276,8 +310,10 @@ def build_turn_resolution(
     resolution_kind: str,
     reason_tags: list[str],
     state: GameState,
+    lorebook: Any | None = None,
 ) -> TurnResolution:
     visible_npcs = _visible_npcs_for_narration(state)
+    lorebook_context = _lorebook_context(lorebook) if lorebook else {}
     return TurnResolution(
         turn_id=turn_id,
         player_input=player_input,
@@ -289,9 +325,86 @@ def build_turn_resolution(
         reason_tags=reason_tags,
         visible_npcs=visible_npcs,
         recent_events=list(state.recent_events[-10:]),
+        recent_history=[
+            {
+                "turn_id": int(item.get("turn_id", 0)),
+                "player_input": str(item.get("player_input") or ""),
+                "summary": str(item.get("summary") or ""),
+            }
+            for item in state.history[-3:]
+            if isinstance(item, dict)
+        ],
         scene=state.get_current_scene(),
         player_state=dict(state.player),
+        **lorebook_context,  # type: ignore[typeddict-item]
     )
+
+
+def _lorebook_context(lorebook: Any) -> dict[str, Any]:
+    """Extract lorebook entries for inclusion in turn_resolution."""
+    if lorebook is None:
+        return {"lorebook_entries": []}
+    try:
+        entries = []
+        for entry in lorebook.all_entries():
+            entries.append({
+                "type": entry.type,
+                "title": entry.title,
+                "summary": entry.summary,
+                "tags": entry.tags,
+                "linked_entity_id": entry.linked_entity_id,
+            })
+        return {"lorebook_entries": entries}
+    except Exception:
+        return {"lorebook_entries": []}
+
+
+def _sync_lorebook_for_patch(
+    lorebook: Any,
+    open_ended_changes: dict[str, Any],
+    turn_id: int,
+) -> None:
+    """Sync generated entities (NPCs, clues) from a content patch to lorebook."""
+    if lorebook is None:
+        return
+    patch = open_ended_changes.get("runtime_script_patch")
+    if not isinstance(patch, dict):
+        return
+    for op in patch.get("ops", []):
+        if not isinstance(op, dict):
+            continue
+        if op.get("op") != "add_entity":
+            continue
+        entity = op.get("entity")
+        if not isinstance(entity, dict):
+            continue
+        entity_type = str(entity.get("type") or "")
+        tags = [str(t) for t in entity.get("tags", [])]
+        name = str(entity.get("name") or op.get("id") or "unknown")
+        entity_id = str(op.get("id") or "")
+
+        if entity_type == "npc" or "npc" in tags:
+            lorebook.create_entry(
+                type="character",
+                title=name,
+                summary=f"运行时生成的NPC：{name}",
+                tags=["derived", "character", "generated"],
+                source="derived",
+                linked_entity_id=entity_id,
+                linked_turn_ids=[turn_id],
+                discovered=True,
+            )
+        elif entity_type in {"clue", "pickup", "item"} or "clue" in tags:
+            lorebook.create_entry(
+                type="event",
+                title=f"发现：{name}",
+                summary=f"在第{turn_id}回合发现了{name}。",
+                tags=["derived", "clue", "generated"],
+                source="derived",
+                linked_entity_id=entity_id,
+                linked_turn_ids=[turn_id],
+                discovered=True,
+            )
 
 
 def _visible_npcs_for_narration(state: GameState) -> dict[str, dict[str, Any]]:

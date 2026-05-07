@@ -22,6 +22,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   const [selectedEntity, setSelectedEntity] = useState(null)
   const [panel, setPanel] = useState(null) // { type: 'skills'|'status'|'backpack' }
   const [inputDraft, setInputDraft] = useState('')
+  const [forceCriticalArmed, setForceCriticalArmed] = useState(false)
   const [inputFocusToken, setInputFocusToken] = useState(0)
   const timersRef = useRef([])
 
@@ -55,6 +56,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
   }
 
   const handleSend = useCallback(async (input) => {
+    const useForcedCritical = forceCriticalArmed
     setSending(true)
     clearTimers()
     // Start progress simulation
@@ -63,10 +65,11 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
       timersRef.current.push(id)
     })
     try {
-      const data = await runTurn(sessionId, input)
+      const data = await runTurn(sessionId, input, { forceCritical: useForcedCritical })
       clearTimers()
       setPendingStatus('')
       setInputDraft('')
+      setForceCriticalArmed(false)
       setTurns((prev) => [...prev, data.turn])
       setStatus(data.status || null)
       if (data.is_game_over) {
@@ -81,7 +84,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     } finally {
       setSending(false)
     }
-  }, [sessionId, onSessionEnded])
+  }, [sessionId, onSessionEnded, forceCriticalArmed])
 
   const handleOpenPanel = useCallback((panelType) => {
     setPanel({ type: panelType })
@@ -114,6 +117,11 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     if (!command || sending || isGameOver) return
     setInputDraft(command)
     setInputFocusToken(token => token + 1)
+  }, [sending, isGameOver])
+
+  const handleToggleForceCritical = useCallback(() => {
+    if (sending || isGameOver) return
+    setForceCriticalArmed((armed) => !armed)
   }, [sending, isGameOver])
 
   const endingLabel = (e) => {
@@ -156,12 +164,14 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
         <InputBar
           onSend={handleSend}
           onOpenPanel={handleOpenPanel}
+          onToggleForceCritical={handleToggleForceCritical}
           value={inputDraft}
           onChange={setInputDraft}
           focusToken={inputFocusToken}
           disabled={sending}
           pendingStatus={pendingStatus}
           gameOver={isGameOver}
+          forceCriticalArmed={forceCriticalArmed}
         />
       )}
 

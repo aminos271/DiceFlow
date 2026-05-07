@@ -47,16 +47,17 @@ python main.py --no-debug
 ### Web 模式
 
 ```bash
-# 终端 1：启动后端
-uvicorn diceflow.web.server:app --reload --port 8000
-
-# 终端 2：启动前端
-cd web
-npm install
-npm run dev -- --port 5173
+# Windows PowerShell 一键启动前后端
+powershell -ExecutionPolicy Bypass -File .\scripts\start-web.ps1
 ```
 
 浏览器访问 `http://localhost:5173`，选择剧本即可开始。
+
+停止服务：
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-web.ps1
+```
 
 ## 游戏指令
 

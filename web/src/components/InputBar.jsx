@@ -1,6 +1,17 @@
 import { useEffect, useRef } from 'react'
 
-export default function InputBar({ onSend, onOpenPanel, value, onChange, focusToken, disabled, pendingStatus, gameOver }) {
+export default function InputBar({
+  onSend,
+  onOpenPanel,
+  onToggleForceCritical,
+  value,
+  onChange,
+  focusToken,
+  disabled,
+  pendingStatus,
+  gameOver,
+  forceCriticalArmed,
+}) {
   const inputRef = useRef(null)
 
   const handleSubmit = (e) => {
@@ -44,6 +55,15 @@ export default function InputBar({ onSend, onOpenPanel, value, onChange, focusTo
         />
         <button type="submit" className="btn-send" disabled={disabled || !value.trim()}>
           发送
+        </button>
+        <button
+          type="button"
+          className={`btn-force-crit${forceCriticalArmed ? ' armed' : ''}`}
+          onClick={onToggleForceCritical}
+          disabled={disabled}
+          title="测试专用：下一次判定强制 d20=20"
+        >
+          {forceCriticalArmed ? '测试20已开' : '测试20'}
         </button>
         <div className="meta-buttons">
           <button type="button" onClick={() => onOpenPanel('skills')} title="技能栏" disabled={disabled}>技能栏</button>

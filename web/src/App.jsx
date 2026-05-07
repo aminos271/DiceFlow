@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listScripts, createSession, listSessions } from './api.js'
+import { listScripts, listWorlds, createSession, listSessions } from './api.js'
 import ScriptSelect from './pages/ScriptSelect.jsx'
 import GamePage from './pages/GamePage.jsx'
 import SessionHistory from './components/SessionHistory.jsx'
@@ -7,6 +7,7 @@ import SessionHistory from './components/SessionHistory.jsx'
 export default function App() {
   const [view, setView] = useState('select')
   const [scripts, setScripts] = useState([])
+  const [worlds, setWorlds] = useState([])
   const [sessionId, setSessionId] = useState(null)
   const [scriptTitle, setScriptTitle] = useState('')
   const [sessions, setSessions] = useState([])
@@ -14,6 +15,7 @@ export default function App() {
 
   useEffect(() => {
     listScripts().then(setScripts).catch(console.error)
+    listWorlds().then(setWorlds).catch(console.error)
     refreshSessions()
   }, [])
 
@@ -24,6 +26,18 @@ export default function App() {
   const handleSelectScript = async (scriptId, title) => {
     try {
       const data = await createSession(scriptId)
+      setSessionId(data.session_id)
+      setScriptTitle(title)
+      setView('game')
+      refreshSessions()
+    } catch (err) {
+      alert(`创建失败: ${err.message}`)
+    }
+  }
+
+  const handleSelectWorld = async (worldId, title) => {
+    try {
+      const data = await createSession({ world_id: worldId })
       setSessionId(data.session_id)
       setScriptTitle(title)
       setView('game')
@@ -45,6 +59,11 @@ export default function App() {
     setScriptTitle(title)
     setView('game')
     setShowHistory(false)
+  }
+
+  const handleRestartScript = (scriptId, title) => {
+    setShowHistory(false)
+    handleSelectScript(scriptId, title)
   }
 
   if (view === 'game' && sessionId) {
@@ -72,5 +91,14 @@ export default function App() {
     )
   }
 
-  return <ScriptSelect scripts={scripts} sessions={sessions} onSelect={handleSelectScript} onContinue={handleViewSession} />
+  return (
+    <ScriptSelect
+      scripts={scripts}
+      worlds={worlds}
+      sessions={sessions}
+      onSelectScript={handleSelectScript}
+      onSelectWorld={handleSelectWorld}
+      onContinue={handleViewSession}
+    />
+  )
 }

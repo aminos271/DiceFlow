@@ -10,6 +10,7 @@ from diceflow.core.rules import RuleEngine
 from diceflow.llm.client import _compact_state
 from diceflow.scripting.loader import load_script
 from diceflow.scripting.resolver import resolve_action_spec
+from diceflow.core.adjudicator import _looks_open_ended
 
 
 class DynamicAdjudicatorTest(unittest.TestCase):
@@ -69,23 +70,71 @@ class DynamicAdjudicatorTest(unittest.TestCase):
         self.assertFalse(game.state.flags["game_over"])
 
     def test_discover_secret_then_open_it(self) -> None:
-        """Turn 1: '检查墙上有没有暗格' → discover success without entity spawn in default flow.
-        Entity generation is now opt-in via content_patch_generator hooks, not automatic."""
+        """Turn 1: '检查墙上有没有暗格' → discover + open_ended_content spawns entity.
+        Turn 2: interact with the spawned entity via standard rules."""
         game = Game(script=load_script("tomb_entrance"), use_llm=False)
         game.adjudicator = DynamicAdjudicator(random.Random(0))
 
-        # Turn 1 — discover: succeeds but no longer spawns entities by default
+        # Turn 1 — discover a secret compartment
         record = game.run_turn("检查墙上有没有暗格")
 
         self.assertTrue(record.validation["valid"])
         self.assertEqual(record.validation["reason"], "dynamic_adjudication")
         self.assertEqual(record.check["assessment"]["intent_kind"], "discover")
         self.assertEqual(record.check["result"], "success")
-        self.assertTrue(game.state.flags["dynamic_adjudication_used"])
-        # Default flow no longer spawns entities — content generation is opt-in
-        self.assertNotIn("runtime_script_patch", record.state_changes)
-        self.assertNotIn("spawn_entities", record.state_changes)
-        self.assertEqual(len(game.state.script_patches), 0)
+        # Entity spawn via open_ended_content_phase → runtime_script_patch
+        self.assertIn("runtime_script_patch", record.state_changes)
+        self.assertEqual(len(game.state.script_patches), 1)
+        self.assertEqual(game.state.script_patches[0]["ops"][0]["op"], "add_entity")
+
+        spawned_id: str | None = None
+        for eid, entity in game.state.entities.items():
+            if "dynamic" in entity.get("tags", []):
+                spawned_id = eid
+                break
+        self.assertIsNotNone(spawned_id)
+        spawned_id = str(spawned_id)
+        spawned_type = game.state.entities[spawned_id]["type"]
+        self.assertIn(spawned_type, {"container", "clue", "pickup", "npc"})
+        self.assertTrue(game.state.entities[spawned_id]["visible"])
+        self.assertTrue(game.state.entities[spawned_id]["available"])
+        self.assertIn(spawned_id, game.state.script["entities"])
+
+        # Turn 2 — interact with the discovered entity
+        entity_name = str(game.state.entities[spawned_id].get("name", "暗格"))
+        if spawned_type == "container":
+            next_action = {
+                "intent_family": "open",
+                "type": "open",
+                "target": entity_name,
+                "target_id": spawned_id,
+                "tool": "",
+                "tool_id": "",
+                "approach_tags": [],
+                "method_text": f"打开{entity_name}",
+                "method": f"打开{entity_name}",
+            }
+        else:
+            next_action = {
+                "intent_family": "inspect",
+                "type": "inspect",
+                "target": entity_name,
+                "target_id": spawned_id,
+                "tool": "",
+                "tool_id": "",
+                "approach_tags": [],
+                "method_text": f"检查{entity_name}",
+                "method": f"检查{entity_name}",
+            }
+        game.rules = RuleEngine(random.Random(0))
+
+        with patch("diceflow.app.game.parse_intent", return_value=next_action):
+            record2 = game.run_turn(f"检查{entity_name}")
+
+        self.assertIn(record2.action["intent_family"], {"open", "inspect"})
+        self.assertTrue(record2.validation["valid"])
+        # Should use standard script resolution for the spawned entity
+        self.assertFalse(record2.check.get("dynamic", False))
 
 
     def test_discover_override_overrules_llm_improvised(self) -> None:
@@ -341,6 +390,54 @@ class DynamicAdjudicatorTest(unittest.TestCase):
                 expected_substring, events,
                 f"Transition {result} events should contain '{expected_substring}', got: {events}",
             )
+
+
+class OpenEndedSocialRoutingTest(unittest.TestCase):
+    """Verify open-ended social/discover inputs route to dynamic adjudication."""
+
+    def test_looks_open_ended_detects_social_keywords(self) -> None:
+        self.assertTrue(_looks_open_ended({"intent_family": "talk", "method_text": "招募队友"}))
+        self.assertTrue(_looks_open_ended({"intent_family": "talk", "method_text": "打听消息"}))
+        self.assertTrue(_looks_open_ended({"intent_family": "talk", "method_text": "寻找线索"}))
+        self.assertTrue(_looks_open_ended({"intent_family": "inspect", "method_text": "查看可疑痕迹"}))
+        self.assertFalse(_looks_open_ended({"intent_family": "attack", "method_text": "招募"}))
+        self.assertFalse(_looks_open_ended({"intent_family": "talk", "method_text": "你好"}))
+        self.assertFalse(_looks_open_ended({"intent_family": "talk", "method_text": ""}))
+
+    def test_social_recruit_goes_to_adjudication_not_script(self) -> None:
+        """'去酒馆招募队友' with target=barkeeper should use dynamic adjudication
+        instead of being caught by the scripted talk action."""
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        record = game.run_turn("去酒馆招募队友")
+
+        self.assertTrue(record.validation["valid"])
+        self.assertEqual(record.validation["reason"], "dynamic_adjudication")
+        self.assertEqual(record.check["assessment"]["intent_kind"], "social")
+
+    def test_follow_up_recruit_wording_also_goes_to_adjudication(self) -> None:
+        """Follow-up wording like '想找个同伙一起去古墓那里' must still be treated
+        as open-ended social intent rather than fallback scripted talk."""
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        record = game.run_turn("对，想找个同伙一起去古墓那里")
+
+        self.assertTrue(record.validation["valid"])
+        self.assertEqual(record.validation["reason"], "dynamic_adjudication")
+        self.assertEqual(record.check["assessment"]["intent_kind"], "social")
+
+    def test_inspect_clue_goes_to_adjudication(self) -> None:
+        """'打听有没有合适活计' should also go to dynamic adjudication."""
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        game.adjudicator = DynamicAdjudicator(random.Random(0))
+
+        record = game.run_turn("打听有没有合适活计")
+
+        self.assertTrue(record.validation["valid"])
+        self.assertEqual(record.validation["reason"], "dynamic_adjudication")
+        self.assertEqual(record.check["assessment"]["intent_kind"], "social")
 
 
 if __name__ == "__main__":

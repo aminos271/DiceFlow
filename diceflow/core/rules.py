@@ -13,9 +13,9 @@ class RuleEngine:
     def __init__(self, rng: random.Random | None = None) -> None:
         self.rng = rng or random.Random()
 
-    def resolve(self, action: Action, state: GameState) -> dict[str, int | str]:
+    def resolve(self, action: Action, state: GameState, forced_roll: int | None = None) -> dict[str, int | str]:
         dc = self._dc_for(action, state)
-        roll = self.rng.randint(1, 20)
+        roll = forced_roll if forced_roll is not None else self.rng.randint(1, 20)
 
         if roll == 1:
             result = "critical_fail"

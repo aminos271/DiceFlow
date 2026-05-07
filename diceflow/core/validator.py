@@ -43,6 +43,7 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
     action_scope = str(action_spec.get("scope") or "")
     is_scene_action = action_scope == "scene"
     is_generic_action = action_scope == "generic_rule"
+    is_generic_fallback = action_scope == "generic_fallback"
 
     if _requires_target(intent_family, state) and not target_id:
         return {"valid": False, "reason": f"目标不存在或不明确：{target or '未提供'}", "_normalized_action": action}
@@ -53,12 +54,16 @@ def validate(action: Action, state: GameState) -> dict[str, str | bool]:
             return {"valid": False, "reason": f"目标当前不可交互：{target or target_id}", "_normalized_action": action}
         entity = state.entities[target_id]
         allowed_actions = get_allowed_actions(entity)
+        # allowed_actions check applies to entity and generic_fallback,
+        # but NOT to generic_rule (which explicitly matches conditions)
         if not is_generic_action and intent_family not in allowed_actions:
             return {
                 "valid": False,
                 "reason": f"{entity.get('name', target_id)}不能执行该行动：{intent_family}",
                 "_normalized_action": action,
             }
+        # Entity state checks apply to entity and generic_fallback,
+        # but NOT to generic_rule
         if not is_generic_action:
             state_result = _validate_entity_action_state(intent_family, entity)
             if not state_result["valid"]:

@@ -16,7 +16,18 @@ export function listScripts() {
   return request('/scripts')
 }
 
+export function listWorlds() {
+  return request('/worlds')
+}
+
 export function createSession(scriptId, useLLM = true) {
+  // Support both old (string) and new (object with script_id/world_id) signatures
+  if (typeof scriptId === 'object') {
+    return request('/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ ...scriptId, use_llm: useLLM }),
+    })
+  }
   return request('/sessions', {
     method: 'POST',
     body: JSON.stringify({ script_id: scriptId, use_llm: useLLM }),
@@ -31,10 +42,10 @@ export function getSession(sessionId) {
   return request(`/sessions/${sessionId}`)
 }
 
-export function runTurn(sessionId, input) {
+export function runTurn(sessionId, input, options = {}) {
   return request(`/sessions/${sessionId}/turns`, {
     method: 'POST',
-    body: JSON.stringify({ input }),
+    body: JSON.stringify({ input, force_critical: Boolean(options.forceCritical) }),
   })
 }
 

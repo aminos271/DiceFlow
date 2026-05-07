@@ -123,6 +123,48 @@ class TestRunTurn:
         resp = client.post("/api/sessions/deadbeef1234/turns", json={"input": "检查"})
         assert resp.status_code == 404
 
+    def test_run_turn_force_critical_success(self, isolated_store):
+        data = _create_session(isolated_store, script_id="border_town_tavern", use_llm=False)
+        sid = data["session_id"]
+
+        resp = client.post(
+            f"/api/sessions/{sid}/turns",
+            json={"input": "询问老板", "force_critical": True},
+        )
+
+        assert resp.status_code == 200, resp.text
+        turn = resp.json()["turn"]
+        assert turn["check"]["roll"] == 20
+        assert turn["check"]["result"] == "critical_success"
+
+    def test_force_critical_one_shot_does_not_carry_to_next_turn(self, isolated_store):
+        """force_critical=True should only affect the immediate turn, not subsequent ones."""
+        data = _create_session(isolated_store, script_id="border_town_tavern", use_llm=False)
+        sid = data["session_id"]
+
+        # Turn 1 — force critical
+        resp = client.post(
+            f"/api/sessions/{sid}/turns",
+            json={"input": "询问老板", "force_critical": True},
+        )
+        assert resp.status_code == 200, resp.text
+        turn1 = resp.json()["turn"]
+        assert turn1["check"]["roll"] == 20, f"force_critical should give roll=20, got {turn1['check']['roll']}"
+        assert turn1["check"]["result"] == "critical_success"
+
+        # Turn 2 — no force_critical, should NOT carry over
+        resp = client.post(
+            f"/api/sessions/{sid}/turns",
+            json={"input": "询问老板", "force_critical": False},
+        )
+        assert resp.status_code == 200, resp.text
+        turn2 = resp.json()["turn"]
+        # The roll should NOT be forced to 20 — it's a real roll
+        # We can't assert roll != 20 (it's possible by chance), but we can
+        # verify the turn completed normally
+        assert turn2["check"]["roll"] >= 1
+        assert turn2["check"]["roll"] <= 20
+
     def test_combat_end_turn_has_resolution_card(self, isolated_store):
         data = _create_session(isolated_store, use_llm=False)
         sid = data["session_id"]
@@ -361,7 +403,10 @@ class TestStatusData:
     def test_status_in_turn_response(self, isolated_store):
         data = _create_session(isolated_store)
         sid = data["session_id"]
-        resp = client.post(f"/api/sessions/{sid}/turns", json={"input": "检查左门"})
+        resp = client.post(
+            f"/api/sessions/{sid}/turns",
+            json={"input": "检查左门", "forced_roll": 15},
+        )
         body = resp.json()
         status = body["status"]
         assert "hp" in status
@@ -473,8 +518,11 @@ class TestKnownEntities:
         known_ids = {e["id"] for e in resp.json()["status"]["known_entities"]}
         assert "iron_key" not in known_ids, "iron_key is hidden at start"
 
-        # Open the chest to reveal iron_key
-        resp = client.post(f"/api/sessions/{sid}/turns", json={"input": "打开木箱"})
+        # Open the chest with forced_roll=15 to guarantee success
+        resp = client.post(
+            f"/api/sessions/{sid}/turns",
+            json={"input": "打开木箱", "forced_roll": 15},
+        )
         assert resp.status_code == 200, resp.text
         known = resp.json()["status"]["known_entities"]
         key = next((e for e in known if e["id"] == "iron_key"), None)

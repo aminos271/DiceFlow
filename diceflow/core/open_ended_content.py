@@ -16,6 +16,9 @@ OPEN_ENDED_INTENT_KINDS = frozenset({"social", "discover", "improvised", "create
 # Intent kinds that can produce entities without LLM via dynamic_entity_templates
 NO_LLM_SPAWN_INTENT_KINDS = frozenset({"discover", "create_environment"})
 OPEN_ENDED_ALLOWED_OPS = frozenset({"add_entity", "set_flag"})
+SOCIAL_HINT_KEYWORDS = frozenset({"招募", "同伴", "队友", "结伴", "推荐", "打听", "消息", "线索", "活计", "活儿"})
+DISCOVER_HINT_KEYWORDS = frozenset({"找", "寻找", "搜索", "搜查", "查看", "观察", "线索", "有没有", "可疑"})
+ENVIRONMENT_HINT_KEYWORDS = frozenset({"堆", "搬", "摆", "布置", "制造", "搭", "堵", "路障", "陷阱"})
 
 # Minimal fallback for no-LLM dynamic entity spawning when no script template exists.
 FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
@@ -28,14 +31,13 @@ def open_ended_content_phase(
     state: GameState,
     llm: Any | None = None,
 ) -> StateChanges:
-    """Generate roll-quality-dependent content for open-ended dynamic adjudication results.
+    """Generate roll-quality-dependent content for open-ended turns.
 
-    Only triggers when:
-    - LLM is available
+    Triggers when:
     - Game is not over
     - Result is not impossible
-    - Intent kind is social / discover / improvised / create_environment
-    - Script has an explicit world contract
+    - Intent kind can be inferred as social / discover / improvised / create_environment
+    - Script has an explicit world contract for the LLM path
     """
     del adjudicator_changes
 
@@ -45,8 +47,7 @@ def open_ended_content_phase(
     if result == "impossible":
         return {}
 
-    assessment = check.get("assessment", {})
-    intent_kind = str(assessment.get("intent_kind") or "") if isinstance(assessment, dict) else ""
+    intent_kind = _infer_open_ended_intent_kind(action, check)
     if intent_kind not in OPEN_ENDED_INTENT_KINDS:
         return {}
 
@@ -74,6 +75,34 @@ def open_ended_content_phase(
             return {"runtime_script_patch": fallback_patch}
 
     return {}
+
+
+def _infer_open_ended_intent_kind(action: Action, check: CheckResult) -> str:
+    assessment = check.get("assessment", {})
+    if isinstance(assessment, dict):
+        intent_kind = str(assessment.get("intent_kind") or "").strip()
+        if intent_kind in OPEN_ENDED_INTENT_KINDS:
+            return intent_kind
+
+    family = str(action.get("intent_family") or action.get("type") or "").strip()
+    method = " ".join(
+        part for part in (
+            str(action.get("raw_input") or "").strip(),
+            str(action.get("method_text") or "").strip(),
+            str(action.get("method") or "").strip(),
+        )
+        if part
+    )
+
+    if family == "talk" and any(keyword in method for keyword in SOCIAL_HINT_KEYWORDS):
+        return "social"
+    if family in {"inspect", "wait"} and any(keyword in method for keyword in DISCOVER_HINT_KEYWORDS):
+        return "discover"
+    if any(keyword in method for keyword in ENVIRONMENT_HINT_KEYWORDS):
+        return "create_environment"
+    if family == "unknown" and any(keyword in method for keyword in DISCOVER_HINT_KEYWORDS):
+        return "discover"
+    return ""
 
 
 def validate_open_ended_patch(

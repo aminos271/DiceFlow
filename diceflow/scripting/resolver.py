@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from diceflow.core.bootstrap import GENERIC_ACTION_SPECS, GENERIC_DEFAULT_ENTITY_ACTIONS
 from diceflow.core.intent import action_family
 from diceflow.core.models import Action
 from diceflow.scripting.generic_rules import resolve_generic_action_spec
@@ -18,7 +19,11 @@ def get_allowed_actions(entity: dict[str, Any]) -> list[str]:
     metadata = entity.get("metadata", {})
     if "allowed_actions" in metadata:
         return list(metadata["allowed_actions"])
-    return list(metadata.get("actions", {}).keys())
+    if "actions" in metadata:
+        return list(metadata["actions"].keys())
+    # Fall back to generic defaults for the entity type
+    entity_type = str(entity.get("type") or "")
+    return GENERIC_DEFAULT_ENTITY_ACTIONS.get(entity_type, ["inspect"])
 
 
 def resolve_action_spec(action: Action, state: Any) -> dict[str, Any]:
@@ -41,6 +46,12 @@ def resolve_action_spec(action: Action, state: Any) -> dict[str, Any]:
             action_spec = entity_action
     if not action_spec:
         action_spec = state.script.get("scene_actions", {}).get(action_type, {})
+
+    # When script provides no outcomes, use generic action spec
+    if not action_spec.get("outcomes") and action_type in GENERIC_ACTION_SPECS:
+        from copy import deepcopy
+        action_spec = deepcopy(GENERIC_ACTION_SPECS[action_type])
+        scope = "generic_fallback"
 
     return {
         **action_spec,

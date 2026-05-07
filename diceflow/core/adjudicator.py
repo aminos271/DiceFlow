@@ -37,6 +37,17 @@ VALID_REASON_TAGS = frozenset({
 # Keywords that force intent_kind to "discover", overriding LLM misclassification.
 DISCOVER_KEYWORDS = frozenset({"有没有", "找找", "搜索", "搜查", "寻找", "翻找", "找找看", "看看有没有", "可疑", "线索", "脚印", "暗格"})
 
+# Keywords that signal open-ended social/discover intent even when
+# a scripted entity action exists.  These override the normal priority
+# that favors scripted actions over dynamic adjudication.
+OPEN_ENDED_SOCIAL_KEYWORDS = frozenset({
+    "招募", "同伴", "队友", "结伴", "推荐", "打听", "消息",
+    "线索", "活计", "活儿", "流言", "传闻", "谣言", "情报",
+    "同伙", "旅伴", "伙伴", "帮手", "同行", "一起去", "一起",
+    "可疑", "痕迹", "有没有",
+})
+OPEN_ENDED_FAMILIES = frozenset({"talk", "inspect"})
+
 
 def _compute_reason_tags(assessment: dict[str, Any], action: Action) -> list[str]:
     """Derive stable reason_tags from the assessment's intent_kind and risk."""
@@ -109,8 +120,13 @@ class DynamicAdjudicator:
     def can_adjudicate(self, action: Action, validation: dict[str, Any], state: GameState) -> bool:
         if state.flags.get("game_over"):
             return False
-        # Script-defined valid actions take priority — skip adjudication.
+        # Script-defined valid actions normally take priority.
         if validation.get("valid") and action_family(action) != "unknown":
+            # Exception: open-ended social/discover inputs should NOT be
+            # bound by scripted entity action outcomes.  Keywords like
+            # 招募/打听/线索 signal the player wants dynamic generation.
+            if _looks_open_ended(action):
+                return True
             return False
         return True
 
@@ -125,7 +141,7 @@ class DynamicAdjudicator:
                     pass
         return _heuristic_assessment(action, state)
 
-    def resolve(self, assessment: dict[str, Any]) -> CheckResult:
+    def resolve(self, assessment: dict[str, Any], forced_roll: int | None = None) -> CheckResult:
         difficulty = assessment["difficulty"]
         if difficulty == "impossible":
             return {
@@ -137,7 +153,7 @@ class DynamicAdjudicator:
             }
 
         dc = DIFFICULTY_DC[difficulty]
-        roll = self.rng.randint(1, 20)
+        roll = forced_roll if forced_roll is not None else self.rng.randint(1, 20)
         if roll == 1:
             result = "critical_fail"
         elif roll == 20:
@@ -200,6 +216,23 @@ class DynamicAdjudicator:
             "entities": entity_changes,
             "events": [f"{method}没有奏效，{target_name}识破了你的意图并逼近反制。"],
         }
+
+
+def _looks_open_ended(action: Action) -> bool:
+    """Return True if the action looks like an open-ended social/discover input
+    that should be adjudicated dynamically rather than bound by script outcomes."""
+    family = str(action.get("intent_family") or action.get("type") or "")
+    if family not in OPEN_ENDED_FAMILIES:
+        return False
+    text = " ".join(
+        part for part in (
+            str(action.get("raw_input") or "").strip(),
+            str(action.get("method_text") or "").strip(),
+            str(action.get("method") or "").strip(),
+        )
+        if part
+    )
+    return any(kw in text for kw in OPEN_ENDED_SOCIAL_KEYWORDS)
 
 
 def _sanitize_assessment(raw: object, action: Action | None = None) -> dict[str, Any]:
