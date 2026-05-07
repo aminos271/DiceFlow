@@ -9,7 +9,7 @@ from openai import APIError, APIConnectionError, OpenAI
 
 from diceflow import config
 from diceflow.core.dynamic_world import _world_contract
-from diceflow.core.models import Action, CheckResult, StateChanges
+from diceflow.core.models import Action, CheckResult, StateChanges, TurnResolution
 from diceflow.core.state import GameState
 from diceflow.llm.heuristics import (
     ACTION_KEYWORDS,
@@ -24,13 +24,69 @@ PROMPT_DIR = Path(__file__).resolve().parent.parent / "content" / "prompts"
 LLM_RETRY_ATTEMPTS = 2
 
 
+def _build_intent_client() -> OpenAI:
+    """Build client for intent parsing and dynamic adjudication.
+
+    If INTENT_LLM_BASE_URL is set, use it (e.g. local Ollama).
+    Otherwise fall back to DeepSeek defaults.
+    """
+    if config.INTENT_LLM_BASE_URL:
+        return OpenAI(
+            api_key=config.INTENT_LLM_API_KEY or "ollama",
+            base_url=config.INTENT_LLM_BASE_URL,
+        )
+    return OpenAI(
+        api_key=config.DEEPSEEK_API_KEY,
+        base_url=config.DEEPSEEK_API_URL,
+    )
+
+
+def _build_narration_client() -> OpenAI:
+    """Build client for narration and content generation.
+
+    If NARRATION_LLM_BASE_URL is set, use it.
+    Otherwise fall back to DeepSeek defaults.
+    """
+    if config.NARRATION_LLM_BASE_URL:
+        return OpenAI(
+            api_key=config.NARRATION_LLM_API_KEY or "ollama",
+            base_url=config.NARRATION_LLM_BASE_URL,
+        )
+    return OpenAI(
+        api_key=config.DEEPSEEK_API_KEY,
+        base_url=config.DEEPSEEK_API_URL,
+    )
+
+
+def _intent_model() -> str:
+    return config.INTENT_LLM_MODEL or config.DEEPSEEK_MODEL_CHAT
+
+
+def _narration_model() -> str:
+    return config.NARRATION_LLM_MODEL or config.DEEPSEEK_MODEL_CHAT
+
+
 class LLMClient:
     def __init__(self) -> None:
-        self.client = OpenAI(
-            api_key=config.DEEPSEEK_API_KEY,
-            base_url=config.DEEPSEEK_API_URL,
-        )
-        self.model = config.DEEPSEEK_MODEL_CHAT
+        # Intent / adjudication client — required; failure is fatal
+        self.intent_client = _build_intent_client()
+        self.intent_model = _intent_model()
+
+        # Narration / content client — optional; failure only disables narration
+        self.narration_client: OpenAI | None = None
+        self.narration_model: str = ""
+        self._narration_available = False
+        try:
+            self.narration_client = _build_narration_client()
+            self.narration_model = _narration_model()
+            self._narration_available = True
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Narration LLM client unavailable — narrator will use fallback",
+                exc_info=True,
+            )
+
+        # Prompt templates
         self.intent_prompt = (PROMPT_DIR / "intent_parser.txt").read_text(encoding="utf-8")
         self.narrator_prompt = (PROMPT_DIR / "narrator.txt").read_text(encoding="utf-8")
         self.dynamic_content_prompt = (PROMPT_DIR / "dynamic_content_generator.txt").read_text(encoding="utf-8")
@@ -38,9 +94,11 @@ class LLMClient:
         self.open_ended_content_prompt = (PROMPT_DIR / "open_ended_content.txt").read_text(encoding="utf-8")
         self.npc_autonomy_prompt = (PROMPT_DIR / "npc_autonomy.txt").read_text(encoding="utf-8")
 
+    # ── Intent / Adjudication (use intent_client) ────────────────────
+
     def parse_intent(self, player_input: str, state: GameState) -> Action:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
-        content = self._chat(
+        content = self._intent_chat(
             [
                 {"role": "system", "content": self.intent_prompt},
                 {
@@ -52,30 +110,10 @@ class LLMClient:
         )
         return _normalize_action(json.loads(content))
 
-    def narrate(
-        self,
-        action: Action,
-        check: CheckResult,
-        changes: StateChanges,
-        state: GameState,
-    ) -> str:
-        prompt = self.narrator_prompt.format(
-            action=json.dumps(action, ensure_ascii=False),
-            result=json.dumps(check, ensure_ascii=False),
-            changes=json.dumps(changes, ensure_ascii=False),
-            state=json.dumps(_compact_state(state), ensure_ascii=False),
-        )
-        return self._chat(
-            [
-                {"role": "system", "content": "你只输出叙事正文。"},
-                {"role": "user", "content": prompt},
-            ],
-        ).strip()
-
     def evaluate_dynamic_action(self, action: Action, state: GameState) -> dict[str, Any]:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
         action_summary = json.dumps(action, ensure_ascii=False)
-        content = self._chat(
+        content = self._intent_chat(
             [
                 {
                     "role": "system",
@@ -83,9 +121,7 @@ class LLMClient:
                         "你是 TRPG 动态裁定助手，只做定性评估，不决定数值结果。"
                         "只输出 JSON：plausibility, difficulty, risk, intent_kind。"
                         "difficulty 只能是 easy、medium、hard、impossible。"
-                        "如果合理，JSON 里可以加 spawn_entities 字段来描述生成的新实体（可生成 container / item / clue / obstacle / pickup / npc 类型）。"
-                        "npc 类型限制：max_hp 不超过 5、只允许 inspect/talk/take 行动、不可设为 hostile 或 enemy。"
-                        "pickup 类型限制：只是可拾取的小物品，不可为神器或通关关键物。"
+                        "不要输出 spawn_entities、events、state_changes 或任何生成内容。"
                         "禁止让玩家直接通关、秒杀 Boss、无成本获得神器、修改主线设定或跳过核心挑战。"
                     ),
                 },
@@ -98,36 +134,72 @@ class LLMClient:
         )
         return json.loads(content)
 
-    def generate_runtime_content(
-        self,
-        hook: dict[str, Any],
-        action: Action,
-        check: CheckResult,
-        state: GameState,
-    ) -> dict[str, Any]:
-        content = self._chat(
-            [
-                {"role": "system", "content": self.dynamic_content_prompt},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "scene": state.scene,
-                            "action": action,
-                            "check": check,
-                            "prompt_hint": hook.get("prompt_hint", ""),
-                            "allowed_entity_types": hook.get("allowed_entity_types", []),
-                            "max_dc": hook.get("max_dc", 15),
-                            "existing_entity_ids": list(state.entities),
-                            "state": _compact_state(state),
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ],
-            response_format={"type": "json_object"},
+    @property
+    def narration_available(self) -> bool:
+        return self._narration_available
+
+    # ── Narration (uses narration_client) ────────────────────────────
+
+    def narrate_turn(self, turn_resolution: TurnResolution) -> str:
+        if not self._narration_available:
+            raise RuntimeError("Narration LLM is not available")
+        prompt = self.narrator_prompt.format(
+            turn_resolution=json.dumps(turn_resolution, ensure_ascii=False),
         )
-        return json.loads(content)
+        return self._narration_chat(
+            [
+                {"role": "system", "content": "你只输出叙事正文。"},
+                {"role": "user", "content": prompt},
+            ],
+        ).strip()
+
+    # ── Unified content patch generator ──────────────────────────────
+
+    def generate_content_patch(self, context: dict[str, Any]) -> dict[str, Any]:
+        """Unified entry for LLM-driven content generation.
+
+        ``context["mode"]`` determines which generator is called:
+
+        - ``"open_ended"`` — roll-quality-dependent content after adjudication
+        - ``"dynamic_world"`` — new scene/entities when player leaves scripted area
+        - ``"runtime"`` — hook-driven content during standard resolution
+        - ``"npc_autonomy"`` — NPC autonomous action generation
+
+        All generated patches must pass their respective validators before
+        being applied to game state.
+        """
+        mode = str(context.get("mode") or "")
+
+        if mode == "open_ended":
+            return self.generate_open_ended_content(
+                action=context["action"],
+                check=context["check"],
+                state=context["state"],
+                result_quality=context.get("quality", "unknown"),
+            )
+        elif mode == "dynamic_world":
+            return self.generate_dynamic_world(
+                world=context.get("world", _world_contract(context["state"])),
+                action=context["action"],
+                validation=context.get("validation", {}),
+                state=context["state"],
+            )
+        elif mode == "runtime":
+            return self.generate_runtime_content(
+                hook=context["hook"],
+                action=context["action"],
+                check=context["check"],
+                state=context["state"],
+            )
+        elif mode == "npc_autonomy":
+            return self.generate_npc_autonomy(
+                visible_npcs=context["visible_npcs"],
+                action=context["action"],
+                state=context["state"],
+            )
+        return {}
+
+    # ── Legacy generators (kept for compatibility, route via narration_client) ──
 
     def generate_dynamic_world(
         self,
@@ -136,7 +208,7 @@ class LLMClient:
         validation: dict[str, Any],
         state: GameState,
     ) -> dict[str, Any]:
-        content = self._chat(
+        content = self._narration_chat(
             [
                 {"role": "system", "content": self.dynamic_world_prompt},
                 {
@@ -167,7 +239,7 @@ class LLMClient:
         result_quality: str,
     ) -> dict[str, Any]:
         world = _world_contract(state)
-        content = self._chat(
+        content = self._narration_chat(
             [
                 {"role": "system", "content": self.open_ended_content_prompt},
                 {
@@ -192,6 +264,37 @@ class LLMClient:
         )
         return json.loads(content)
 
+    def generate_runtime_content(
+        self,
+        hook: dict[str, Any],
+        action: Action,
+        check: CheckResult,
+        state: GameState,
+    ) -> dict[str, Any]:
+        content = self._narration_chat(
+            [
+                {"role": "system", "content": self.dynamic_content_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "scene": state.scene,
+                            "action": action,
+                            "check": check,
+                            "prompt_hint": hook.get("prompt_hint", ""),
+                            "allowed_entity_types": hook.get("allowed_entity_types", []),
+                            "max_dc": hook.get("max_dc", 15),
+                            "existing_entity_ids": list(state.entities),
+                            "state": _compact_state(state),
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
     def generate_npc_autonomy(
         self,
         visible_npcs: dict[str, Any],
@@ -199,7 +302,7 @@ class LLMClient:
         state: GameState,
     ) -> dict[str, Any]:
         state_summary = json.dumps(_compact_state(state), ensure_ascii=False)
-        content = self._chat(
+        content = self._narration_chat(
             [
                 {"role": "system", "content": self.npc_autonomy_prompt},
                 {
@@ -221,14 +324,33 @@ class LLMClient:
         )
         return json.loads(content)
 
-    def _chat(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
+    # ── Internal chat helpers ────────────────────────────────────────
+
+    def _intent_chat(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        response = self.intent_client.chat.completions.create(
+            model=self.intent_model,
             messages=messages,
             temperature=0.3,
             **kwargs,
         )
         return response.choices[0].message.content or ""
+
+    def _narration_chat(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        if not self._narration_available or self.narration_client is None:
+            raise RuntimeError("Narration LLM is not available")
+        response = self.narration_client.chat.completions.create(
+            model=self.narration_model,
+            messages=messages,
+            temperature=0.3,
+            **kwargs,
+        )
+        return response.choices[0].message.content or ""
+
+    # Backward-compatible alias
+    _chat = _narration_chat
+
+
+# ── Module-level convenience wrappers ──────────────────────────────────
 
 
 def parse_intent(player_input: str, state: GameState, llm: LLMClient | None = None) -> Action:
@@ -247,16 +369,14 @@ def parse_intent(player_input: str, state: GameState, llm: LLMClient | None = No
 
 
 def narrate(
-    action: Action,
-    check: CheckResult,
-    changes: StateChanges,
+    turn_resolution: TurnResolution,
     state: GameState,
     llm: LLMClient | None = None,
 ) -> str:
-    if llm:
+    if llm is not None and getattr(llm, "narration_available", False):
         for attempt in range(LLM_RETRY_ATTEMPTS):
             try:
-                text = llm.narrate(action, check, changes, state)
+                text = llm.narrate_turn(turn_resolution)
                 if text:
                     return text
             except (APIError, APIConnectionError, AttributeError):
@@ -266,8 +386,7 @@ def narrate(
                     LLM_RETRY_ATTEMPTS,
                     exc_info=True,
                 )
-    return fallback_narration(action, check, changes, state)
-
+    return fallback_narration(turn_resolution, state)
 
 
 def _compact_state(state: GameState) -> dict[str, Any]:
@@ -295,5 +414,3 @@ def _compact_state(state: GameState) -> dict[str, Any]:
         "recent_events": snapshot["recent_events"],
         "recent_history": snapshot.get("history", []),
     }
-
-

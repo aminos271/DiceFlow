@@ -651,15 +651,24 @@ class TestEntityEdit:
 
 
 class TestLorebook:
-    def test_new_session_has_empty_lorebook(self, isolated_store):
+    def test_new_session_has_script_seeded_lorebook(self, isolated_store):
+        """New session lorebook is seeded from script with all 4 types."""
         data = _create_session(isolated_store)
         sid = data["session_id"]
         resp = client.get(f"/api/sessions/{sid}/lorebook")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["entries"]["world_entries"] == []
-        assert body["entries"]["character_entries"] == []
+        assert len(body["entries"]["world_entries"]) >= 1
+        assert len(body["entries"]["location_entries"]) >= 1
+        assert len(body["entries"]["character_entries"]) >= 1
         assert body["entries"]["event_entries"] == []
+        all_seeded = (
+            body["entries"]["world_entries"]
+            + body["entries"]["location_entries"]
+            + body["entries"]["character_entries"]
+        )
+        for e in all_seeded:
+            assert e["source"] == "script_seed", f"Seed entry {e['title']} has wrong source"
 
     def test_create_world_entry(self, isolated_store):
         data = _create_session(isolated_store)
@@ -686,9 +695,12 @@ class TestLorebook:
         assert "created_at" in entry
         assert "updated_at" in entry
 
-        # Verify it appears in GET
+        # Verify it appears in GET (alongside seed entries)
         resp2 = client.get(f"/api/sessions/{sid}/lorebook")
-        assert len(resp2.json()["entries"]["world_entries"]) == 1
+        world = resp2.json()["entries"]["world_entries"]
+        assert len(world) >= 2  # seed entries + this one
+        titles = {e["title"] for e in world}
+        assert "古墓传说" in titles
 
     def test_create_character_entry(self, isolated_store):
         data = _create_session(isolated_store)
@@ -743,6 +755,10 @@ class TestLorebook:
     def test_delete_entry(self, isolated_store):
         data = _create_session(isolated_store)
         sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        seed_count = len(resp.json()["entries"]["world_entries"])
+        assert seed_count >= 1
+
         resp = client.post(f"/api/sessions/{sid}/lorebook", json={
             "type": "world",
             "title": "待删除条目",
@@ -753,9 +769,9 @@ class TestLorebook:
         assert resp2.status_code == 200, resp2.text
         assert resp2.json()["status"] == "deleted"
 
-        # Verify it's gone
+        # Verify it's gone but seed entries remain
         resp3 = client.get(f"/api/sessions/{sid}/lorebook")
-        assert len(resp3.json()["entries"]["world_entries"]) == 0
+        assert len(resp3.json()["entries"]["world_entries"]) == seed_count
 
     def test_delete_nonexistent_entry(self, isolated_store):
         data = _create_session(isolated_store)
@@ -815,18 +831,20 @@ class TestLorebook:
         store2.load_from_disk()
 
         restored = store2.sessions[sid]
-        assert len(restored.lorebook.world_entries) == 1
-        assert len(restored.lorebook.character_entries) == 1
+        # Seed entries exist from script + manually added entries
+        world_titles = {e.title for e in restored.lorebook.world_entries}
+        assert "世界条目1" in world_titles
+        char_titles = {e.title for e in restored.lorebook.character_entries}
+        assert "角色条目1" in char_titles
         assert len(restored.lorebook.event_entries) == 1
-        assert restored.lorebook.world_entries[0].title == "世界条目1"
-        assert restored.lorebook.character_entries[0].title == "角色条目1"
         assert restored.lorebook.event_entries[0].title == "事件条目1"
 
         # Can continue using lorebook
         with mock.patch("diceflow.web.server.store", store2):
             resp = client.get(f"/api/sessions/{sid}/lorebook")
         assert resp.status_code == 200
-        assert len(resp.json()["entries"]["world_entries"]) == 1
+        world_titles_resp = {e["title"] for e in resp.json()["entries"]["world_entries"]}
+        assert "世界条目1" in world_titles_resp
 
     def test_old_save_without_lorebook_field_loads(self, isolated_store):
         """Session JSON without lorebook field must load with empty lorebook."""
@@ -901,3 +919,166 @@ class TestLorebook:
         })
         assert resp2.status_code == 200, resp2.text
         assert resp2.json()["entry"]["linked_entity_id"] is None
+
+    def test_new_session_has_script_seed_entries(self, isolated_store):
+        """After creating a session, lorebook must contain script_seed entries."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        entries = resp.json()["entries"]
+        assert len(entries["world_entries"]) >= 1, "Expected at least one world seed entry"
+        assert len(entries["location_entries"]) >= 1, "Expected at least one location seed entry"
+        assert len(entries["character_entries"]) >= 1, "Expected at least one character seed entry"
+        for key in ("world_entries", "location_entries", "character_entries"):
+            sources = {e["source"] for e in entries[key]}
+            assert "script_seed" in sources, f"{key} missing script_seed"
+
+    def test_script_seed_character_has_valid_linked_entity_id(self, isolated_store):
+        """Character seed entries must have linked_entity_id pointing to real entities."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        session = isolated_store.get(sid)
+        for entry in resp.json()["entries"]["character_entries"]:
+            if entry["source"] == "script_seed" and entry["linked_entity_id"]:
+                assert entry["linked_entity_id"] in session.game.state.entities, (
+                    f"linked_entity_id {entry['linked_entity_id']} not in entities"
+                )
+
+    def test_seed_not_applied_on_reload(self, isolated_store):
+        """Loading a saved session must not re-seed the lorebook."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+
+        # Verify initial seed
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        initial_world_count = len(resp.json()["entries"]["world_entries"])
+        assert initial_world_count >= 1
+
+        # Reload from disk
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        # Should still have exactly the same number of seed entries
+        assert len(restored.lorebook.world_entries) == initial_world_count
+        assert restored.lorebook.has_script_seed()
+
+    def test_old_session_without_seed_still_loads(self, isolated_store):
+        """Session JSON with only manual entries must load correctly."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+
+        # Manually rewrite lorebook to simulate old-style entries
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        raw = json.loads(filepath.read_text(encoding="utf-8"))
+        raw["lorebook"] = {
+            "world_entries": [{
+                "id": "oldentry01", "type": "world", "title": "旧条目",
+                "aliases": [], "summary": "旧世界条目", "content": "",
+                "tags": ["old"], "pinned": False, "discovered": False,
+                "source": "manual",
+                "linked_entity_id": None, "linked_turn_ids": [],
+                "created_at": "", "updated_at": "",
+            }],
+            "character_entries": [],
+            "event_entries": [],
+        }
+        filepath.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        store2 = SessionStore()
+        store2.data_dir = isolated_store.data_dir
+        store2.sessions.clear()
+        store2.load_from_disk()
+
+        restored = store2.sessions[sid]
+        assert len(restored.lorebook.world_entries) == 1
+        assert restored.lorebook.world_entries[0].source == "manual"
+        assert restored.lorebook.world_entries[0].title == "旧条目"
+        assert not restored.lorebook.has_script_seed()
+
+    def test_source_field_roundtrips_via_api(self, isolated_store):
+        """Source field must persist through create and disk round-trip."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+
+        # Create with explicit source
+        resp = client.post(f"/api/sessions/{sid}/lorebook", json={
+            "type": "world",
+            "title": "测试来源",
+            "source": "script_seed",
+        })
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["entry"]["source"] == "script_seed"
+
+        # Check on disk
+        filepath = isolated_store.data_dir / f"{sid}.json"
+        raw = json.loads(filepath.read_text(encoding="utf-8"))
+        disk_entries = raw["lorebook"]["world_entries"]
+        manual_entry = next((e for e in disk_entries if e["title"] == "测试来源"), None)
+        assert manual_entry is not None
+        assert manual_entry["source"] == "script_seed"
+
+    def test_world_content_seeded_when_world_id_present(self, isolated_store):
+        """tomb_entrance has world_id, so seed must come from world files."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        entries = resp.json()["entries"]
+
+        # World entries from world_book/ (background/setting)
+        world_titles = {e["title"] for e in entries["world_entries"]}
+        assert "古墓概览" in world_titles, f"Expected 古墓概览, got {world_titles}"
+
+        # Location entries from locations/
+        loc_titles = {e["title"] for e in entries["location_entries"]}
+        assert "古墓入口" in loc_titles, f"Expected 古墓入口 in location_entries, got {loc_titles}"
+
+        # Character entries from characters/
+        char_titles = {e["title"] for e in entries["character_entries"]}
+        assert "守卫" in char_titles
+
+        # All should be script_seed
+        for e in entries["world_entries"] + entries["location_entries"] + entries["character_entries"]:
+            assert e["source"] == "script_seed"
+
+    def test_world_seed_character_has_valid_linked_entity_id(self, isolated_store):
+        """Guard character seed must link to guard_1 entity."""
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        session = isolated_store.get(sid)
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        guard_entry = next(
+            (e for e in resp.json()["entries"]["character_entries"] if e["title"] == "守卫"),
+            None,
+        )
+        assert guard_entry is not None
+        assert guard_entry["linked_entity_id"] == "guard_1"
+        assert guard_entry["linked_entity_id"] in session.game.state.entities
+
+    def test_fallback_when_no_world_id_in_script(self, isolated_store):
+        """Script without world_id uses old inline seed logic."""
+        data = _create_session(isolated_store, script_id="dungeon_corridor")
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}/lorebook")
+        entries = resp.json()["entries"]
+        # dungeon_corridor has no world_id, should seed from inline fields
+        assert len(entries["world_entries"]) >= 1
+        for e in entries["world_entries"]:
+            assert e["source"] == "script_seed"
+
+    def test_lorebook_imports_world_loader(self):
+        """Sanity: lorebook module imports world loader without errors."""
+        from diceflow.content.worlds.loader import load_world_content, world_exists
+        assert world_exists("tomb_entrance") is True
+        assert world_exists("nonexistent_world") is False
+        content = load_world_content("tomb_entrance")
+        assert content is not None
+        assert "world_book" in content
+        assert len(content["world_book"]) >= 1
+        assert "locations" in content
+        assert len(content["locations"]) >= 1
+        assert "characters" in content
+        assert len(content["characters"]) >= 1

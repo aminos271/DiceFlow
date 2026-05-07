@@ -1,0 +1,7 @@
+{
+  "id": "tomb_entrance",
+  "title": "古墓入口",
+  "description": "一座被遗忘的古代君王陵墓，入口隐藏在山腹深处。昏暗的石室里潮气弥漫，守卫、机关与未知危险等待着闯入者。",
+  "script_ids": ["tomb_entrance"],
+  "default_tags": ["古墓", "地下城", "陷阱"]
+}

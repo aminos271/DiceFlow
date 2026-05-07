@@ -130,6 +130,7 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
         <span className="logo">🎲 DiceFlow</span>
         <span className="script-name">{scriptTitle}</span>
         <span className="spacer" />
+        <button onClick={() => handleOpenPanel('lorebook')}>📚 资料库</button>
         <button onClick={onOpenHistory}>📋 历史</button>
         <button onClick={onBack}>← 返回</button>
       </div>

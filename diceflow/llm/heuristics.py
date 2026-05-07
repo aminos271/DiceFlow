@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from diceflow.core.intent import canonical_family, extract_approach_tags, normalize_action
-from diceflow.core.models import Action, CheckResult, StateChanges
+from diceflow.core.models import Action, CheckResult, StateChanges, TurnResolution
 from diceflow.core.state import GameState
 from diceflow.core.utils import result_label
 
@@ -148,23 +148,30 @@ def _append_mention(
 
 
 def fallback_narration(
-    action: Action,
-    check: CheckResult,
-    changes: StateChanges,
+    turn_resolution: TurnResolution,
     state: GameState,
 ) -> str:
-    del action
-    result = str(check.get("result"))
+    check = turn_resolution.get("check") or {}
+    changes = turn_resolution.get("state_changes") or {}
+    resolution_kind = turn_resolution.get("resolution_kind", "standard")
+
+    result = str(check.get("result") or "")
     event_text = "；".join(changes.get("events", []))
     if not event_text:
-        event_text = "局势发生了变化，你必须立刻决定下一步。"
+        if resolution_kind == "invalid":
+            validation = turn_resolution.get("validation") or {}
+            event_text = str(validation.get("reason") or "行动没有成立，但局势仍在推进。")
+        else:
+            event_text = "局势发生了变化，你必须立刻决定下一步。"
 
     ending = state.flags.get("ending")
     if ending:
         ending_text = state.script.get("ending_texts", {}).get(ending, f"结局：{ending}。")
         return f"{event_text} {ending_text}"
 
-    return f"{result_label(result)}：{event_text} 当前生命 {state.player['hp']}/{state.player['max_hp']}。"
+    if result:
+        return f"{result_label(result)}：{event_text} 当前生命 {state.player['hp']}/{state.player['max_hp']}。"
+    return f"{event_text} 当前生命 {state.player['hp']}/{state.player['max_hp']}。"
 
 
 def _normalize_action(raw: dict[str, Any]) -> Action:

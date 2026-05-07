@@ -68,6 +68,7 @@ TOP_LEVEL_TYPES = {
     "ending_conditions": list,
 }
 OPTIONAL_TOP_LEVEL_TYPES = {
+    "world_id": str,
     "intro": str,
     "invalid_action_event": str,
     "generic_rules": list,

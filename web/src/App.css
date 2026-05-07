@@ -212,11 +212,13 @@ input:focus {
 .top-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  row-gap: 6px;
   padding: 10px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .top-bar .logo {
@@ -1226,6 +1228,13 @@ input:focus {
 }
 
 /* ── Lorebook Panel ──────────────────────────────────────────────── */
+
+.popup-card.popup-lorebook {
+  width: 980px;
+  max-width: 95vw;
+  max-height: 85vh;
+}
+
 .lorebook-panel {
   display: flex;
   flex-direction: column;
@@ -1242,14 +1251,15 @@ input:focus {
 
 .lore-tab {
   flex: 1;
-  padding: 6px 8px;
+  padding: 5px 4px;
   background: var(--surface2);
   color: var(--text-dim);
   border: 1px solid var(--border);
   border-radius: var(--radius) var(--radius) 0 0;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: 0.15s;
+  text-align: center;
 }
 
 .lore-tab:hover {
@@ -1266,14 +1276,14 @@ input:focus {
 
 .lorebook-body {
   display: flex;
-  gap: 10px;
+  gap: 24px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
 .lorebook-sidebar {
-  width: 200px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1287,6 +1297,8 @@ input:focus {
   font-size: 12px;
   color: var(--text-dim);
   margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -1295,7 +1307,7 @@ input:focus {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .lore-empty {
@@ -1366,32 +1378,41 @@ input:focus {
 .lorebook-main {
   flex: 1;
   overflow-y: auto;
-  min-width: 0;
+  min-width: 380px;
 }
 
 .lore-detail {
-  padding: 0 4px;
+  padding: 0;
 }
 
 .lore-detail h3 {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-bright);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: normal;
+  word-break: break-word;
 }
 
+/* ── Detail header: title + action buttons ───────────────────── */
 .lore-detail-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 10px;
-  gap: 8px;
+  margin-bottom: 14px;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 
 .lore-detail-header h3 {
   margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
   flex: 1;
   min-width: 0;
 }
@@ -1403,22 +1424,46 @@ input:focus {
   flex-wrap: wrap;
 }
 
+/* ── Detail rows: grid layout ────────────────────────────────── */
 .lore-detail-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
+.lore-detail-body > .detail-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.lore-detail-body > .detail-row .detail-label {
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lore-detail-body > .detail-row .detail-value {
+  color: var(--text);
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* ── Content block ───────────────────────────────────────────── */
 .lore-content {
   margin-top: 8px;
-  padding: 8px;
+  padding: 10px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 12px;
   color: var(--text);
-  line-height: 1.6;
+  line-height: 1.7;
   white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .lore-error {
@@ -1438,4 +1483,27 @@ input:focus {
 
 .btn-danger:hover {
   background: var(--red) !important;
+}
+
+/* ── Responsive: stack vertically on narrow windows ──────────── */
+@media (max-width: 760px) {
+  .popup-card.popup-lorebook {
+    width: 95vw;
+  }
+
+  .lorebook-body {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .lorebook-sidebar {
+    width: 100%;
+    max-height: 180px;
+    flex-shrink: 0;
+  }
+
+  .lorebook-main {
+    min-width: 0;
+    flex: 1;
+  }
 }

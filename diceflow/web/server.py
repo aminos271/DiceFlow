@@ -66,7 +66,7 @@ class UpdateEntityRequest(BaseModel):
 
 
 class LoreEntryCreate(BaseModel):
-    type: Literal["world", "character", "event"]
+    type: Literal["world", "location", "character", "event"]
     title: str = Field(min_length=1, max_length=80)
     aliases: list[str] = Field(default_factory=list)
     summary: str = ""
@@ -74,12 +74,13 @@ class LoreEntryCreate(BaseModel):
     tags: list[str] = Field(default_factory=list)
     pinned: bool = False
     discovered: bool = False
+    source: Literal["script_seed", "manual", "derived"] = "manual"
     linked_entity_id: str | None = None
     linked_turn_ids: list[int] = Field(default_factory=list)
 
 
 class LoreEntryUpdate(BaseModel):
-    type: Literal["world", "character", "event"] | None = None
+    type: Literal["world", "location", "character", "event"] | None = None
     title: str | None = Field(default=None, min_length=1, max_length=80)
     aliases: list[str] | None = None
     summary: str | None = None
@@ -87,6 +88,7 @@ class LoreEntryUpdate(BaseModel):
     tags: list[str] | None = None
     pinned: bool | None = None
     discovered: bool | None = None
+    source: Literal["script_seed", "manual", "derived"] | None = None
     linked_entity_id: str | None = None
     linked_turn_ids: list[int] | None = None
 
@@ -218,6 +220,7 @@ def create_lore_entry(session_id: str, body: LoreEntryCreate) -> dict[str, Any]:
         tags=body.tags,
         pinned=body.pinned,
         discovered=body.discovered,
+        source=body.source,
         linked_entity_id=body.linked_entity_id,
         linked_turn_ids=body.linked_turn_ids,
     )

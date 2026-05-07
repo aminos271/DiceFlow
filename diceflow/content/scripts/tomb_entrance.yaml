@@ -1,5 +1,6 @@
 schema_version: 1
 id: tomb_entrance
+world_id: tomb_entrance
 title: 古墓入口
 intro: DiceFlow MVP：20 轮内逃出古墓。输入 q/quit/退出 结束。
 invalid_action_event: 行动没有成立，但局势没有停下，守卫继续压迫你的空间。

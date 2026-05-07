@@ -369,7 +369,7 @@ export default function PopupOverlay({ type, status, sessionId, onClose, onEditE
 
   return (
     <div className="popup-overlay" onClick={handleBackdrop}>
-      <div className="popup-card">
+      <div className={`popup-card${type === 'lorebook' ? ' popup-lorebook' : ''}`}>
         <div className="popup-header">
           <span className="popup-title">{titles[type] || ''}</span>
           <button className="btn-close-detail" onClick={onClose}>✕</button>

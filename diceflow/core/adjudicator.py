@@ -21,37 +21,67 @@ VALID_DIFFICULTY = {"easy", "medium", "hard", "impossible"}
 VALID_RISK = {"low", "medium", "high"}
 VALID_INTENT_KIND = {"deception", "stealth", "improvised", "use", "social", "discover", "create_environment", "transition"}
 
-# Safe types for dynamically spawned entities (whitelist, not arbitrary types)
-SAFE_SPAWN_TYPES = {"container", "item", "clue", "obstacle", "pickup", "npc"}
-
-# Allowed keys for dynamically spawned entity specs
-SAFE_SPAWN_ALLOWED_KEYS = frozenset(
-    {
-        "name",
-        "aliases",
-        "type",
-        "tags",
-        "contents",
-        "metadata",
-        "hooks",
-        "lifecycle",
-        "hp",
-        "max_hp",
-        "item_id",
-        "value",
-        "rarity",
-    }
-)
-
-# NPC spawn safety: max HP, restricted actions, no hostile flag
-NPC_SPAWN_MAX_HP = 5
-NPC_SPAWN_ALLOWED_ACTIONS = frozenset({"inspect", "talk", "take"})
-
-# Minimal fallback for dynamic entity spawning when no script template exists.
-FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
+# Stable reason tags provided to the narrator for flavour and hooks.
+# Computed from intent_kind + risk + method keywords.
+VALID_REASON_TAGS = frozenset({
+    "discover",
+    "social",
+    "stealth",
+    "forceful",
+    "world_transition_attempt",
+    "needs_tool",
+    "risky",
+    "improvised",
+})
 
 # Keywords that force intent_kind to "discover", overriding LLM misclassification.
 DISCOVER_KEYWORDS = frozenset({"有没有", "找找", "搜索", "搜查", "寻找", "翻找", "找找看", "看看有没有", "可疑", "线索", "脚印", "暗格"})
+
+
+def _compute_reason_tags(assessment: dict[str, Any], action: Action) -> list[str]:
+    """Derive stable reason_tags from the assessment's intent_kind and risk."""
+    tags: list[str] = []
+    intent_kind = str(assessment.get("intent_kind") or "")
+    risk = str(assessment.get("risk") or "")
+
+    if intent_kind == "discover":
+        tags.append("discover")
+    elif intent_kind in {"social", "deception"}:
+        tags.append("social")
+    elif intent_kind == "stealth":
+        tags.append("stealth")
+    elif intent_kind == "transition":
+        tags.append("world_transition_attempt")
+    elif intent_kind == "create_environment":
+        tags.append("improvised")
+    elif intent_kind == "improvised":
+        tags.append("improvised")
+    elif intent_kind == "use":
+        tags.append("improvised")
+
+    if risk == "high":
+        tags.append("risky")
+
+    method = str(action.get("method_text") or action.get("method") or "")
+    if intent_kind != "discover" and any(term in method for term in DISCOVER_KEYWORDS):
+        if "discover" not in tags:
+            tags.append("discover")
+
+    if "forceful" in str(action.get("approach_tags") or []):
+        if "forceful" not in tags:
+            tags.append("forceful")
+
+    if not tags:
+        tags.append("improvised")
+
+    # Dedupe preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for tag in tags:
+        if tag not in seen:
+            seen.add(tag)
+            result.append(tag)
+    return result
 
 
 def _apply_discover_override(action: Action, assessment: dict[str, Any]) -> None:
@@ -84,18 +114,18 @@ class DynamicAdjudicator:
             return False
         return True
 
-    def assess(self, action: Action, state: GameState, llm: Any | None = None) -> dict[str, str]:
+    def assess(self, action: Action, state: GameState, llm: Any | None = None) -> dict[str, Any]:
         if llm and hasattr(llm, "evaluate_dynamic_action"):
             for _ in range(2):
                 try:
-                    assessment = _sanitize_assessment(llm.evaluate_dynamic_action(action, state))
+                    assessment = _sanitize_assessment(llm.evaluate_dynamic_action(action, state), action)
                     _apply_discover_override(action, assessment)
                     return assessment
                 except Exception:
                     pass
         return _heuristic_assessment(action, state)
 
-    def resolve(self, assessment: dict[str, str]) -> CheckResult:
+    def resolve(self, assessment: dict[str, Any]) -> CheckResult:
         difficulty = assessment["difficulty"]
         if difficulty == "impossible":
             return {
@@ -143,18 +173,7 @@ class DynamicAdjudicator:
             }
 
         if result in {"critical_success", "success"}:
-            changes = _success_changes(action, state, target_id, target_name, method, intent_kind, result)
-            spawn = assessment.get("spawn_entities", {})
-            if isinstance(spawn, dict) and spawn:
-                spawn_changes = changes.setdefault("spawn_entities", {})
-                spawn_changes.update(deepcopy(spawn))
-                changes["runtime_script_patch"] = _runtime_patch_for_spawn(spawn_changes, state)
-            elif intent_kind in {"discover", "create_environment"}:
-                spawn = _resolve_dynamic_spawn_from_script(intent_kind, state)
-                if spawn:
-                    changes["spawn_entities"] = spawn
-                    changes["runtime_script_patch"] = _runtime_patch_for_spawn(spawn, state)
-            return changes
+            return _success_changes(action, state, target_id, target_name, method, intent_kind, result)
 
         # Discover / Transition failure — no HP cost, different narrative
         if intent_kind in {"discover", "transition"}:
@@ -183,7 +202,7 @@ class DynamicAdjudicator:
         }
 
 
-def _sanitize_assessment(raw: object) -> dict[str, str]:
+def _sanitize_assessment(raw: object, action: Action | None = None) -> dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
     plausibility = str(data.get("plausibility") or "reasonable")
     difficulty = str(data.get("difficulty") or "medium")
@@ -208,123 +227,11 @@ def _sanitize_assessment(raw: object) -> dict[str, str]:
         "intent_kind": intent_kind,
     }
 
-    # Pass through spawn_entities if safely defined
-    if isinstance(data, dict):
-        spawn = _sanitize_spawn_spec(data.get("spawn_entities"))
-        if spawn:
-            result["spawn_entities"] = spawn
-
-    return result
-
-
-def _sanitize_spawn_spec(spawn: object) -> dict[str, dict[str, Any]]:
-    """Validate and sanitize a spawn_entities definition.
-
-    Only allows container / item / clue / obstacle / pickup / npc types
-    and a whitelist of safe keys. All spawned entities are marked
-    ``category: persistent`` so they survive beyond the current turn.
-
-    NPC spawns are subject to additional safety constraints:
-    - max HP capped at NPC_SPAWN_MAX_HP
-    - actions restricted to inspect/talk/take
-    - hostile/attack tags are stripped
-    """
-    if not isinstance(spawn, dict):
-        return {}
-
-    safe_specs: dict[str, dict[str, Any]] = {}
-    for entity_id, spec in spawn.items():
-        if not isinstance(spec, dict):
-            continue
-        entity_type = str(spec.get("type", "")).lower()
-        if entity_type not in SAFE_SPAWN_TYPES:
-            continue
-
-        safe_spec: dict[str, Any] = {}
-        for key in SAFE_SPAWN_ALLOWED_KEYS:
-            if key in spec:
-                safe_spec[key] = deepcopy(spec[key])
-
-        if not safe_spec.get("name"):
-            safe_spec["name"] = str(entity_id)
-
-        # NPC-specific safety: cap HP, restrict actions, strip hostility
-        if entity_type == "npc":
-            _sanitize_npc_spawn(safe_spec)
-
-        # Persist — spawned entities survive across turns
-        safe_spec.setdefault("lifecycle", {})
-        if isinstance(safe_spec["lifecycle"], dict):
-            safe_spec["lifecycle"]["category"] = "persistent"
-
-        safe_specs[f"dynamic_{entity_id}"] = safe_spec
-
-    return safe_specs
-
-
-def _sanitize_npc_spawn(spec: dict[str, Any]) -> None:
-    """Apply NPC safety constraints to a dynamically spawned NPC entity."""
-    spec["hp"] = min(int(spec.get("hp", NPC_SPAWN_MAX_HP)), NPC_SPAWN_MAX_HP)
-    spec["max_hp"] = spec["hp"]
-    spec["alive"] = True
-    # Strip hostile tags
-    tags = spec.get("tags")
-    if isinstance(tags, list):
-        spec["tags"] = [t for t in tags if t not in {"hostile", "enemy"}]
-    elif not isinstance(tags, list):
-        spec["tags"] = ["dynamic", "npc"]
-    # Restrict allowed actions to safe set
-    metadata = spec.get("metadata")
-    if not isinstance(metadata, dict):
-        metadata = {}
-        spec["metadata"] = metadata
-    raw_allowed = metadata.get("allowed_actions", ["inspect", "talk"])
-    if isinstance(raw_allowed, list):
-        metadata["allowed_actions"] = [a for a in raw_allowed if a in NPC_SPAWN_ALLOWED_ACTIONS]
-    if not metadata.get("allowed_actions"):
-        metadata["allowed_actions"] = ["inspect", "talk"]
-    # Only keep safe action specs
-    actions = metadata.get("actions")
-    if isinstance(actions, dict):
-        metadata["actions"] = {
-            k: v for k, v in actions.items() if k in NPC_SPAWN_ALLOWED_ACTIONS
-        }
-
-
-def _resolve_dynamic_spawn_from_script(intent_kind: str, state: GameState) -> dict[str, dict[str, Any]]:
-    """Resolve spawn_entities from script-level dynamic_entity_templates.
-
-    When the script has multi-variant templates (e.g. discover, discover_item,
-    discover_npc), cycles through all matching entries so each discover feels
-    different rather than always generating the same container.
-    """
-    templates = state.script.get("dynamic_entity_templates", {})
-    if templates:
-        # Collect all template keys matching this intent_kind (including sub-variants)
-        candidates = sorted(k for k in templates if k == intent_kind or k.startswith(f"{intent_kind}_"))
-        if candidates:
-            template = templates[candidates[state.turn_id % len(candidates)]]
-        else:
-            template = FALLBACK_DYNAMIC_SPAWN
+    # Compute stable reason tags for narrator / hooks
+    if action:
+        result["reason_tags"] = _compute_reason_tags(result, action)
     else:
-        template = FALLBACK_DYNAMIC_SPAWN
-    entity_id = f"dynamic_{intent_kind}_{state.turn_id}"
-    return _sanitize_spawn_spec({entity_id: deepcopy(template)})
+        result["reason_tags"] = _compute_reason_tags(result, {})
 
-
-def _runtime_patch_for_spawn(spawn: dict[str, dict[str, Any]], state: GameState) -> dict[str, Any]:
-    return {
-        "id": f"dynamic_spawn_turn_{state.turn_id}",
-        "source": "dynamic_adjudicator",
-        "turn_id": state.turn_id,
-        "ops": [
-            {
-                "op": "add_entity",
-                "id": str(entity_id),
-                "entity": deepcopy(entity),
-            }
-            for entity_id, entity in spawn.items()
-        ],
-    }
-
-
+    # Never pass through spawn_entities — content generation is separate
+    return result

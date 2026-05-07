@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getLorebook, createLoreEntry, updateLoreEntry, deleteLoreEntry } from '../api.js'
 
-const TYPE_LABELS = { world: '世界观', character: '角色', event: '事件' }
-const TABS = ['world', 'character', 'event']
+const TYPE_LABELS = { world: '世界观', location: '地点', character: '角色', event: '事件' }
+const TABS = ['world', 'location', 'character', 'event']
 const EMPTY_FORM = {
   title: '', aliases: '', summary: '', content: '', tags: '',
   pinned: false, discovered: false, linked_entity_id: '', linked_turn_ids: '',

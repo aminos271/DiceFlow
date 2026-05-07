@@ -9,6 +9,10 @@ from diceflow.core.reaction import merge_state_changes
 from diceflow.core.state import GameState
 from diceflow.llm.client import LLMClient
 
+# When False (default), normal turns never call npc_autonomy_phase.
+# Set to True via hook or script flag to re-enable for important events.
+NPC_AUTONOMY_ENABLED = False
+
 AUTONOMY_COOLDOWN = 2
 ALLOWED_CHANGE_KEYS = {"player", "entities", "events", "set_entity_states"}
 

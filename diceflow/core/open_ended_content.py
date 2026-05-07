@@ -13,7 +13,12 @@ from diceflow.core.state import GameState
 LOGGER = logging.getLogger(__name__)
 OPEN_ENDED_SOURCE = "open_ended_content"
 OPEN_ENDED_INTENT_KINDS = frozenset({"social", "discover", "improvised", "create_environment"})
+# Intent kinds that can produce entities without LLM via dynamic_entity_templates
+NO_LLM_SPAWN_INTENT_KINDS = frozenset({"discover", "create_environment"})
 OPEN_ENDED_ALLOWED_OPS = frozenset({"add_entity", "set_flag"})
+
+# Minimal fallback for no-LLM dynamic entity spawning when no script template exists.
+FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
 
 
 def open_ended_content_phase(
@@ -34,8 +39,6 @@ def open_ended_content_phase(
     """
     del adjudicator_changes
 
-    if llm is None:
-        return {}
     if state.flags.get("game_over"):
         return {}
     result = str(check.get("result") or "")
@@ -47,26 +50,30 @@ def open_ended_content_phase(
     if intent_kind not in OPEN_ENDED_INTENT_KINDS:
         return {}
 
-    if not isinstance(state.script.get("world"), dict):
-        return {}
+    # LLM path: requires world contract + LLM
+    if llm is not None and isinstance(state.script.get("world"), dict):
+        quality = _result_quality(result)
+        try:
+            raw_patch = _generate_open_ended_patch(llm, action, check, state, quality)
+            patch, events = validate_open_ended_patch(raw_patch, state)
+        except Exception as exc:
+            LOGGER.warning("open-ended content generation failed: %s", exc)
+            patch, events = None, None
+        if patch is not None or events:
+            changes: StateChanges = {}
+            if patch is not None:
+                changes["runtime_script_patch"] = patch
+            if events:
+                changes["events"] = [events]
+            return changes
 
-    quality = _result_quality(result)
-    try:
-        raw_patch = _generate_open_ended_patch(llm, action, check, state, quality)
-        patch, events = validate_open_ended_patch(raw_patch, state)
-    except Exception as exc:
-        LOGGER.warning("open-ended content generation failed: %s", exc)
-        return {}
+    # No-LLM fallback: use script dynamic_entity_templates for discover/create_environment
+    if result in {"success", "critical_success"} and intent_kind in NO_LLM_SPAWN_INTENT_KINDS:
+        fallback_patch = _no_llm_dynamic_spawn_patch(intent_kind, state)
+        if fallback_patch:
+            return {"runtime_script_patch": fallback_patch}
 
-    if patch is None and not events:
-        return {}
-
-    changes: StateChanges = {}
-    if patch is not None:
-        changes["runtime_script_patch"] = patch
-    if events:
-        changes["events"] = [events]
-    return changes
+    return {}
 
 
 def validate_open_ended_patch(
@@ -157,6 +164,47 @@ def _generate_open_ended_patch(
     quality: str,
 ) -> object:
     """Dispatch to LLM client for open-ended content generation."""
+    if hasattr(llm, "generate_content_patch"):
+        return llm.generate_content_patch({
+            "mode": "open_ended",
+            "action": action,
+            "check": check,
+            "state": state,
+            "quality": quality,
+        })
     if hasattr(llm, "generate_open_ended_content"):
         return llm.generate_open_ended_content(action, check, state, quality)
     return None
+
+
+def _no_llm_dynamic_spawn_patch(intent_kind: str, state: GameState) -> dict[str, Any] | None:
+    """Build a runtime_script_patch from script-level dynamic_entity_templates.
+
+    When the script has multi-variant templates (e.g. discover, discover_item,
+    discover_npc), cycles through all matching entries so each use feels
+    different rather than always generating the same entity.
+    """
+    templates = state.script.get("dynamic_entity_templates", {})
+    if templates:
+        candidates = sorted(k for k in templates if k == intent_kind or k.startswith(f"{intent_kind}_"))
+        if candidates:
+            template = templates[candidates[state.turn_id % len(candidates)]]
+        else:
+            template = FALLBACK_DYNAMIC_SPAWN
+    else:
+        template = FALLBACK_DYNAMIC_SPAWN
+
+    entity_id = f"dynamic_{intent_kind}_{state.turn_id}"
+    entity = deepcopy(template)
+    entity.setdefault("name", str(entity_id))
+    entity.setdefault("tags", ["dynamic"])
+    entity.setdefault("lifecycle", {"category": "persistent"})
+
+    return {
+        "id": f"dynamic_spawn_turn_{state.turn_id}",
+        "source": OPEN_ENDED_SOURCE,
+        "turn_id": state.turn_id,
+        "ops": [
+            {"op": "add_entity", "id": entity_id, "entity": entity},
+        ],
+    }

@@ -76,6 +76,7 @@ class SessionStore:
             game=game,
             use_llm=use_llm,
         )
+        session.lorebook.seed_from_script(game.script)
         self.sessions[session_id] = session
         self.save_to_disk(session)
         return session

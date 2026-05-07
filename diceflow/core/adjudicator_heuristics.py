@@ -133,40 +133,16 @@ def _success_changes(
             "events": [f"你穿过{target_name}，进入了新的区域。"],
         }
     elif intent_kind == "use":
-        smoke_id = f"dynamic_smoke_{state.turn_id}"
         return {
             "entities": entities,
             "flags": flags,
-            "spawn_entities": {
-                smoke_id: {
-                    "name": "临时烟雾",
-                    "aliases": ["烟雾", "烟"],
-                    "type": "temporary",
-                    "tags": ["temporary", "obscuring"],
-                    "available": True,
-                    "visible": True,
-                    "expires_after_turns": 2,
-                }
-            },
             "events": [f"{method}制造出遮蔽，{target_name}一时难以判断你的位置。"],
         }
 
     if action_family(action) in {"throw", "use"} and intent_kind == "improvised":
-        noise_id = f"dynamic_noise_{state.turn_id}"
         changes: dict[str, Any] = {
             "entities": entities,
             "flags": flags,
-            "spawn_entities": {
-                noise_id: {
-                    "name": "临时噪音",
-                    "aliases": ["噪音", "声响"],
-                    "type": "temporary",
-                    "tags": ["temporary", "noise", "distraction"],
-                    "available": True,
-                    "visible": True,
-                    "expires_after_turns": 1,
-                }
-            },
             "events": events,
         }
         if strong_success:
