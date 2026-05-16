@@ -14,7 +14,7 @@ from diceflow.core.lifecycle import (
     prepare_spawned_entity,
 )
 from diceflow.core.matching import match_entity_name
-from diceflow.core.models import Thread
+from diceflow.core.models import Location, Thread
 from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
 from diceflow.core.utils import dedupe_preserving_order
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
@@ -39,6 +39,10 @@ class GameState:
         self.history: list[dict[str, Any]] = []
         self.entity_journal: list[dict[str, Any]] = []
         self.threads: dict[str, Thread] = {}
+        self.locations: dict[str, Location] = {
+            loc_id: Location.from_dict(loc_data) if isinstance(loc_data, dict) else Location(id=loc_id, name=loc_id)
+            for loc_id, loc_data in self.script.get("locations", {}).items()
+        }
 
     def apply_script_patch(self, patch: RuntimeScriptPatch | None) -> None:
         if not patch:
@@ -83,6 +87,7 @@ class GameState:
             "entity_journal": deepcopy(self.entity_journal[-10:]),
             "script_patches": deepcopy(self.script_patches[-10:]),
             "threads": {tid: t.to_dict() for tid, t in self.threads.items()},
+            "locations": {lid: l.to_dict() for lid, l in self.locations.items()},
         }
 
     def get_visible_entities(self) -> dict[str, dict[str, Any]]:
@@ -103,10 +108,31 @@ class GameState:
         return [str(item) for item in self.player.get("inventory", [])]
 
     def get_current_scene_id(self) -> str:
-        return str(self.script.get("id") or self.scene.get("id") or self.scene.get("name") or "")
+        return str(
+            self.flags.get("runtime.current_scene_id")
+            or self.scene.get("id")
+            or self.script.get("id")
+            or self.scene.get("name")
+            or ""
+        )
 
     def get_current_scene(self) -> dict[str, Any]:
         return deepcopy(self.scene)
+
+    def get_exits(self) -> list[dict[str, str]]:
+        current_id = self.get_current_scene_id()
+        loc = self.locations.get(current_id)
+        if not loc or not loc.exits:
+            return []
+        result: list[dict[str, str]] = []
+        for direction, target_id in loc.exits.items():
+            target_loc = self.locations.get(target_id)
+            result.append({
+                "direction": direction,
+                "location_id": target_id,
+                "location_name": target_loc.name if target_loc else target_id,
+            })
+        return result
 
     def get_available_action_hints(self) -> list[str]:
         hints: list[str] = []
@@ -269,6 +295,44 @@ class GameState:
                     new_items = [str(i) for i in value] if isinstance(value, list) else []
                     setattr(thread, list_key, list(dict.fromkeys(existing + new_items)))
             thread.last_updated_turn_id = self.turn_id
+
+        for loc_id, loc_data in changes.get("add_location", {}).items():
+            if not isinstance(loc_data, dict):
+                continue
+            if loc_id in self.locations:
+                continue
+            loc_data.setdefault("id", loc_id)
+            loc_data.setdefault("last_visited_turn_id", self.turn_id)
+            self.locations[loc_id] = Location.from_dict(loc_data)
+
+        for loc_id, loc_data in changes.get("update_location", {}).items():
+            if not isinstance(loc_data, dict) or loc_id not in self.locations:
+                continue
+            loc = self.locations[loc_id]
+            if "name" in loc_data:
+                loc.name = str(loc_data["name"])
+            if "description" in loc_data:
+                loc.description = str(loc_data["description"])
+            if "discovered" in loc_data:
+                loc.discovered = bool(loc_data["discovered"])
+            if "danger_level" in loc_data:
+                try:
+                    danger_level = int(loc_data["danger_level"])
+                except (TypeError, ValueError):
+                    danger_level = loc.danger_level
+                loc.danger_level = max(0, min(5, danger_level))
+            if "exits" in loc_data:
+                exits = loc_data["exits"]
+                if isinstance(exits, dict):
+                    for direction, target_id in exits.items():
+                        loc.exits[str(direction)] = str(target_id)
+            for list_key in ("related_thread_ids",):
+                if list_key in loc_data:
+                    existing = getattr(loc, list_key)
+                    value = loc_data[list_key]
+                    new_items = [str(i) for i in value] if isinstance(value, list) else []
+                    setattr(loc, list_key, list(dict.fromkeys(existing + new_items)))
+            loc.last_visited_turn_id = self.turn_id
 
         for event in changes.get("events", []):
             self.recent_events.append(str(event))

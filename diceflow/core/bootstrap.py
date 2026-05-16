@@ -201,6 +201,7 @@ class WorldBootstrap:
     invalid_action_event: str = "行动没有成立，但局势仍在推进。"
     default_no_outcome_event: str = "局势发生了变化，你必须立刻决定下一步。"
     ending_texts: dict = field(default_factory=dict)
+    locations: dict = field(default_factory=dict)
 
     def to_script_dict(self) -> dict[str, Any]:
         """Produce a dict that satisfies the minimal Script interface."""
@@ -227,6 +228,7 @@ class WorldBootstrap:
             "invalid_action_event": self.invalid_action_event,
             "default_no_outcome_event": self.default_no_outcome_event,
             "ending_texts": deepcopy(self.ending_texts),
+            "locations": deepcopy(self.locations),
         }
 
 
@@ -469,6 +471,7 @@ def _bootstrap_from_world_config(
         invalid_action_event=str(config.get("invalid_action_event", "行动没有成立，但局势仍在推进。")),
         default_no_outcome_event=str(config.get("default_no_outcome_event", "局势发生了变化，你必须立刻决定下一步。")),
         ending_texts=deepcopy(config.get("ending_texts", {})),
+        locations=deepcopy(config.get("locations", {})),
     )
 
 

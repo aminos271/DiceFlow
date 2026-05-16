@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from diceflow.core.models import Thread
+from diceflow.core.models import Location, Thread
 from diceflow.web import DATA_DIR, Session, SessionStore, _now_iso
 from diceflow.web.server import app
 from diceflow.content.worlds.loader import WORLDS_DIR
@@ -160,6 +160,40 @@ class TestGetSession:
         assert resp.status_code == 200
         threads = resp.json()["status"]["threads"]
         assert [t["id"] for t in threads] == ["visible"]
+
+    def test_session_status_includes_exits(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "status" in body
+        assert "exits" in body["status"]
+        assert isinstance(body["status"]["exits"], list)
+        assert body["status"]["exits"] == []  # empty for new session
+
+    def test_session_status_includes_exit_hint_group(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        session = isolated_store.get(sid)
+        session.game.state.scene["id"] = "start"
+        session.game.state.locations["start"] = Location(
+            id="start",
+            name="起点",
+            discovered=True,
+            exits={"北": "north"},
+        )
+        session.game.state.locations["north"] = Location(
+            id="north",
+            name="北室",
+            discovered=True,
+        )
+
+        resp = client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        status = resp.json()["status"]
+        assert status["exits"] == [{"direction": "北", "location_id": "north", "location_name": "北室"}]
+        assert any(item["command"] == "前往北室" for item in status["hint_groups"]["explore"])
 
     def test_get_nonexistent_session(self, isolated_store):
         resp = client.get("/api/sessions/deadbeef1234")

@@ -135,6 +135,7 @@ class StatusData(BaseModel):
     hints: list[str]
     hint_groups: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
     threads: list[dict[str, Any]] = Field(default_factory=list)
+    exits: list[dict[str, str]] = Field(default_factory=list)
     is_game_over: bool = False
     ending: str | None = None
 
@@ -588,6 +589,9 @@ def _build_status(session) -> StatusData:
                 info["personality"] = {"traits": [], "manner": personality, "motivation": ""}
         entity_list.append(info)
 
+    exit_hints = _exit_movement_hints(state)
+    all_hints = exit_hints + (state.get_available_action_hints() or ["检查周围", "等待/观察局势"])
+
     return StatusData(
         turn_id=state.turn_id,
         hp=state.player.get("hp", 0),
@@ -598,17 +602,24 @@ def _build_status(session) -> StatusData:
         visible_entities=entity_list,
         known_entities=_build_known_entities(session),
         hostile_count=hostile_count,
-        hints=state.get_available_action_hints() or ["检查周围", "等待/观察局势"],
-        hint_groups=_build_hint_groups(state),
+        hints=all_hints,
+        hint_groups=_build_hint_groups(state, exit_hints),
         threads=_build_thread_list(state),
+        exits=_build_exit_list(state),
         is_game_over=bool(state.flags.get("game_over")),
         ending=state.flags.get("ending"),
     )
 
 
-def _build_hint_groups(state) -> dict[str, list[dict[str, str]]]:
+def _build_hint_groups(state, exit_hints: list[str] | None = None) -> dict[str, list[dict[str, str]]]:
     hints = state.get_available_action_hints() or ["检查周围", "等待/观察局势"]
     groups: dict[str, list[dict[str, str]]] = {"recommended": [], "explore": [], "risky": []}
+    for hint in exit_hints or []:
+        groups["explore"].append({
+            "label": hint,
+            "detail": "前往已知地点，不需要重新生成场景",
+            "command": hint,
+        })
     for hint in hints:
         text = str(hint)
         detail = _hint_detail(text, state)
@@ -983,6 +994,15 @@ def _write_seed_files(world_dir: Path, body: WorldCreateRequest, bootstrap: dict
 def _remove_world_dir(world_dir: Path) -> None:
     if world_dir.exists():
         shutil.rmtree(world_dir, ignore_errors=True)
+
+
+def _build_exit_list(state) -> list[dict[str, str]]:
+    return state.get_exits()
+
+
+def _exit_movement_hints(state) -> list[str]:
+    from diceflow.app.hints import exit_movement_hints
+    return exit_movement_hints(state)
 
 
 def _help_text() -> str:

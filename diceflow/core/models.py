@@ -108,6 +108,49 @@ class Thread:
         )
 
 
+@dataclass
+class Location:
+    id: str
+    name: str
+    description: str = ""
+    discovered: bool = False
+    exits: dict[str, str] = field(default_factory=dict)  # direction_name -> location_id
+    danger_level: int = 0
+    related_thread_ids: list[str] = field(default_factory=list)
+    last_visited_turn_id: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "discovered": self.discovered,
+            "exits": dict(self.exits),
+            "danger_level": self.danger_level,
+            "related_thread_ids": list(self.related_thread_ids),
+            "last_visited_turn_id": self.last_visited_turn_id,
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> "Location":
+        return Location(
+            id=str(data.get("id", "")),
+            name=str(data.get("name", "")),
+            description=str(data.get("description", "")),
+            discovered=bool(data.get("discovered", False)),
+            exits=_string_to_string_dict(data.get("exits", {})),
+            danger_level=_clamp_int(data.get("danger_level", 0), 0, 5),
+            related_thread_ids=_string_list(data.get("related_thread_ids", [])),
+            last_visited_turn_id=_clamp_int(data.get("last_visited_turn_id", 0), 0, 999999),
+        )
+
+
+def _string_to_string_dict(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(k): str(v) for k, v in value.items()}
+
+
 def _clamp_int(value: Any, minimum: int, maximum: int) -> int:
     try:
         number = int(value)

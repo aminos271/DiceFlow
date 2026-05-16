@@ -720,6 +720,27 @@ textarea:focus {
   margin-top: 2px;
 }
 
+/* ── Exit (Location) Section ──────────────────────────────────── */
+.exit-item {
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exit-direction {
+  color: var(--cyan);
+  font-weight: 500;
+  min-width: 36px;
+}
+
+.exit-name {
+  color: var(--text-bright);
+}
+
 .entity-item {
   font-size: 13px;
   padding: 4px 6px;

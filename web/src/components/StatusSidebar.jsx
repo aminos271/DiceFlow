@@ -264,6 +264,7 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
     status: true,
     backpack: true,
     scene: true,
+    exits: true,
     threads: true,
     entities: true,
     hints: false,
@@ -329,6 +330,24 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
       >
         <div className="scene-name">📍 {status.scene_name}</div>
         <div className="scene-desc">{status.scene_description}</div>
+      </AccordionSection>
+
+      <AccordionSection
+        title="可前往地点"
+        count={status.exits?.length ?? 0}
+        expanded={expanded.exits}
+        onToggle={() => toggleSection('exits')}
+      >
+        {status.exits?.length ? (
+          status.exits.map((exit) => (
+            <div key={exit.location_id} className="exit-item">
+              <span className="exit-direction">{exit.direction}</span>
+              <span className="exit-name">📍 {exit.location_name}</span>
+            </div>
+          ))
+        ) : (
+          <div className="inv-empty">暂无已知出口</div>
+        )}
       </AccordionSection>
 
       <AccordionSection

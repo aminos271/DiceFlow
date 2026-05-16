@@ -22,6 +22,8 @@ VALID_CHANGE_KEYS = {
     "set_entity_states",
     "add_thread",
     "update_thread",
+    "add_location",
+    "update_location",
 }
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
@@ -85,6 +87,7 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "dynamic_entity_templates": dict,
     "runtime_generation_hooks": list,
     "world": dict,
+    "locations": dict,
 }
 
 
@@ -344,6 +347,10 @@ def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has
         errors.append(f"{path}.update_thread must be a dict")
     elif isinstance(changes.get("update_thread"), dict):
         _validate_thread_changes(f"{path}.update_thread", changes["update_thread"], errors, is_add=False)
+    if "add_location" in changes and not isinstance(changes["add_location"], dict):
+        errors.append(f"{path}.add_location must be a dict")
+    if "update_location" in changes and not isinstance(changes["update_location"], dict):
+        errors.append(f"{path}.update_location must be a dict")
 
 
 def _validate_thread_changes(path: str, thread_changes: dict[str, Any], errors: list[str], *, is_add: bool) -> None:

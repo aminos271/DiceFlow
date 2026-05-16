@@ -31,3 +31,13 @@ def get_allowed_actions(entity: dict[str, Any]) -> list[str]:
     if "allowed_actions" in metadata:
         return list(metadata["allowed_actions"])
     return list(metadata.get("actions", {}).keys())
+
+
+def exit_movement_hints(state) -> list[str]:
+    exits = state.get_exits()
+    if not exits:
+        return []
+    hints = []
+    for exit_info in exits:
+        hints.append(f"前往{exit_info['location_name']}")
+    return hints
