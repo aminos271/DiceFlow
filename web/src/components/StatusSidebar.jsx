@@ -264,6 +264,7 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
     status: true,
     backpack: true,
     scene: true,
+    threads: true,
     entities: true,
     hints: false,
   })
@@ -328,6 +329,39 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
       >
         <div className="scene-name">📍 {status.scene_name}</div>
         <div className="scene-desc">{status.scene_description}</div>
+      </AccordionSection>
+
+      <AccordionSection
+        title="当前线索/目标"
+        count={status.threads?.filter(t => t.status === 'active').length ?? 0}
+        expanded={expanded.threads}
+        onToggle={() => toggleSection('threads')}
+      >
+        {status.threads?.length ? (
+          status.threads.map((thread) => (
+            <div key={thread.id} className={`thread-item ${thread.status}`}>
+              <div className="thread-title">
+                {thread.status === 'completed' ? '✓ ' : thread.status === 'failed' ? '✗ ' : '◆ '}
+                {thread.title}
+              </div>
+              <div className="thread-progress-outer">
+                <div
+                  className={`thread-progress-inner ${thread.status}`}
+                  style={{ width: `${Math.max(0, Math.min(100, thread.progress))}%` }}
+                />
+              </div>
+              <div className="thread-meta">
+                <span>{thread.progress}%</span>
+                <span>{thread.status === 'active' ? '进行中' : thread.status === 'completed' ? '已完成' : '已失败'}</span>
+              </div>
+              {thread.next_hint && thread.status === 'active' && (
+                <div className="thread-hint">💡 {thread.next_hint}</div>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="inv-empty">暂无线索</div>
+        )}
       </AccordionSection>
 
       <AccordionSection

@@ -6,7 +6,9 @@ $runRoot = Join-Path $repoRoot ".run"
 function Stop-TrackedProcess {
     param(
         [string]$Name,
-        [string]$PidFile
+        [string]$PidFile,
+        [string[]]$ExpectedProcessNames = @(),
+        [string]$ExpectedCommandLinePattern = ""
     )
 
     if (-not (Test-Path $PidFile)) {
@@ -16,10 +18,25 @@ function Stop-TrackedProcess {
 
     $rawPid = Get-Content $PidFile -ErrorAction SilentlyContinue
     if ($rawPid) {
-        $proc = Get-Process -Id ([int]$rawPid) -ErrorAction SilentlyContinue
+        $pidValue = 0
+        if (-not [int]::TryParse($rawPid, [ref]$pidValue)) {
+            Write-Host "$Name PID file was invalid."
+            Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+            return
+        }
+
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$pidValue" -ErrorAction SilentlyContinue
         if ($proc) {
-            & taskkill /PID $proc.Id /T /F | Out-Null
-            Write-Host "Stopped $Name (PID $($proc.Id))."
+            $nameMatches = -not $ExpectedProcessNames -or ($ExpectedProcessNames -contains $proc.Name)
+            $commandLineMatches = -not $ExpectedCommandLinePattern -or ($proc.CommandLine -match $ExpectedCommandLinePattern)
+
+            if ($nameMatches -and $commandLineMatches) {
+                & taskkill /PID $proc.ProcessId /T /F | Out-Null
+                Write-Host "Stopped $Name (PID $($proc.ProcessId))."
+            }
+            else {
+                Write-Host "$Name PID file pointed to an unrelated process; ignoring stale PID $pidValue."
+            }
         }
         else {
             Write-Host "$Name PID file existed, but process was already gone."
@@ -75,8 +92,16 @@ function Stop-MatchingProcessTree {
     }
 }
 
-Stop-TrackedProcess -Name "backend" -PidFile (Join-Path $runRoot "backend.pid")
-Stop-TrackedProcess -Name "frontend" -PidFile (Join-Path $runRoot "frontend.pid")
+Stop-TrackedProcess `
+    -Name "backend" `
+    -PidFile (Join-Path $runRoot "backend.pid") `
+    -ExpectedProcessNames @("python.exe") `
+    -ExpectedCommandLinePattern "uvicorn.+diceflow\.web\.server:app"
+Stop-TrackedProcess `
+    -Name "frontend" `
+    -PidFile (Join-Path $runRoot "frontend.pid") `
+    -ExpectedProcessNames @("cmd.exe", "node.exe") `
+    -ExpectedCommandLinePattern "(npm\.cmd.+run.+dev.+--port.+5173)|(vite.+5173)"
 Stop-MatchingProcessTree -ProcessName "python.exe" -CommandLinePattern "uvicorn.+diceflow\.web\.server:app"
 Stop-MatchingProcessTree -ProcessName "node.exe" -CommandLinePattern "vite.+5173"
 Stop-PortListener -Port 8000

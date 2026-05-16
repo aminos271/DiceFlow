@@ -134,15 +134,42 @@ def _success_changes(
             entities[target_id]["hostile"] = False
         flags["dynamic_distraction_created"] = True
         events = [f"对方的态度明显松动。"]
+        thread_title = f"与{target_name}建立联系" if target_name else "与对方交涉"
+        return {
+            "entities": entities,
+            "flags": flags,
+            "events": events,
+            "add_thread": {
+                f"thread_social_{state.turn_id}": {
+                    "id": f"thread_social_{state.turn_id}",
+                    "title": thread_title,
+                    "status": "active",
+                    "progress": 20,
+                    "discovered": True,
+                    "next_hint": f"继续与{target_name}交谈，了解ta的立场" if target_name else "继续对话",
+                }
+            },
+        }
     elif intent_kind == "stealth":
         if target_id and target_id in entities:
             entities[target_id]["line_of_sight_blocked"] = True
         flags["dynamic_path_opened"] = True
         events = [f"环境中出现了一个短暂的窗口。"]
     elif intent_kind == "discover":
+        thread_title = f"调查{target_name}的线索" if target_name else "调查新发现"
         return {
             "flags": flags,
             "events": [f"你发现了一个新的可交互对象。"],
+            "add_thread": {
+                f"thread_discover_{state.turn_id}": {
+                    "id": f"thread_discover_{state.turn_id}",
+                    "title": thread_title,
+                    "status": "active",
+                    "progress": 20,
+                    "discovered": True,
+                    "next_hint": "仔细检查发现的事物，寻找更多线索",
+                }
+            },
         }
     elif intent_kind == "create_environment":
         return {

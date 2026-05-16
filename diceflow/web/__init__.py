@@ -10,6 +10,7 @@ from typing import Any
 from diceflow.app.game import Game
 from diceflow.core.bootstrap import WorldBootstrap, bootstrap_from_defaults, bootstrap_from_lorebook
 from diceflow.core.lorebook import SessionLore
+from diceflow.core.models import Thread
 from diceflow.scripting.loader import load_script
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sessions"
@@ -277,6 +278,12 @@ def _restore_snapshot_legacy(game: Game, snapshot: dict[str, Any]) -> None:
         state.entity_journal = list(snapshot["entity_journal"])
     if "history" in snapshot:
         state.history = list(snapshot["history"])
+    if "threads" in snapshot:
+        threads = snapshot["threads"] if isinstance(snapshot["threads"], dict) else {}
+        state.threads = {
+            tid: Thread.from_dict(td) if isinstance(td, dict) else Thread(id=tid, title=tid)
+            for tid, td in threads.items()
+        }
 
 
 def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
@@ -301,3 +308,9 @@ def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
         state.entity_journal = list(snapshot["entity_journal"])
     if "history" in snapshot:
         state.history = list(snapshot["history"])
+    if "threads" in snapshot:
+        threads = snapshot["threads"] if isinstance(snapshot["threads"], dict) else {}
+        state.threads = {
+            tid: Thread.from_dict(td) if isinstance(td, dict) else Thread(id=tid, title=tid)
+            for tid, td in threads.items()
+        }

@@ -277,7 +277,32 @@ entities:
     alive: true
     location: 入口
     hostile: true
+    inventory: [guard_1_shield]
+    equipped:
+      offhand: guard_1_shield
     tags: [enemy, human, hostile]
+  guard_1_shield:
+    name: 盾牌
+    aliases: [盾牌, 守卫的盾牌, 破损盾牌]
+    type: item
+    item_id: 盾牌
+    source: guard_1
+    holder_id: guard_1
+    location: guard_1
+    visible: false
+    available: false
+    value: 5
+    rarity: common
+    durability: 2
+    properties:
+      defense: 1
+      condition: damaged
+    tags: [item, equipment, shield]
+    hooks:
+      take_critical_success_events: [你取下守卫的盾牌，虽然边缘破损，但仍能派上用场。]
+      take_success_events: [你拿起守卫的盾牌，收进可用装备里。]
+      take_fail_events: [盾牌压在尸体下面，你需要再调整一下角度。]
+      inspect_success_events: [这面盾牌有明显裂痕，但还能挡住一次正面冲击。]
   left_door:
     name: 左门
     aliases: [门, 左门, 石门]

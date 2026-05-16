@@ -15,7 +15,9 @@ New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 
 function Stop-TrackedProcess {
     param(
-        [string]$PidFile
+        [string]$PidFile,
+        [string[]]$ExpectedProcessNames = @(),
+        [string]$ExpectedCommandLinePattern = ""
     )
 
     if (-not (Test-Path $PidFile)) {
@@ -28,9 +30,20 @@ function Stop-TrackedProcess {
         return
     }
 
-    $proc = Get-Process -Id ([int]$rawPid) -ErrorAction SilentlyContinue
+    $pidValue = 0
+    if (-not [int]::TryParse($rawPid, [ref]$pidValue)) {
+        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$pidValue" -ErrorAction SilentlyContinue
     if ($proc) {
-        Stop-Process -Id $proc.Id -Force
+        $nameMatches = -not $ExpectedProcessNames -or ($ExpectedProcessNames -contains $proc.Name)
+        $commandLineMatches = -not $ExpectedCommandLinePattern -or ($proc.CommandLine -match $ExpectedCommandLinePattern)
+
+        if ($nameMatches -and $commandLineMatches) {
+            & taskkill /PID $proc.ProcessId /T /F | Out-Null
+        }
     }
 
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
@@ -57,10 +70,15 @@ function Start-TrackedProcess {
         [string]$WorkingDirectory,
         [string]$PidFile,
         [string]$LogFile,
-        [string]$ErrLogFile
+        [string]$ErrLogFile,
+        [string[]]$ExpectedProcessNames = @(),
+        [string]$ExpectedCommandLinePattern = ""
     )
 
-    Stop-TrackedProcess -PidFile $PidFile
+    Stop-TrackedProcess `
+        -PidFile $PidFile `
+        -ExpectedProcessNames $ExpectedProcessNames `
+        -ExpectedCommandLinePattern $ExpectedCommandLinePattern
 
     $proc = Start-Process `
         -FilePath $FilePath `
@@ -95,7 +113,9 @@ $backend = Start-TrackedProcess `
     -WorkingDirectory $repoRoot `
     -PidFile $backendPidFile `
     -LogFile $backendLog `
-    -ErrLogFile $backendErrLog
+    -ErrLogFile $backendErrLog `
+    -ExpectedProcessNames @("python.exe") `
+    -ExpectedCommandLinePattern "uvicorn.+diceflow\.web\.server:app"
 
 $frontend = Start-TrackedProcess `
     -FilePath "npm.cmd" `
@@ -103,7 +123,9 @@ $frontend = Start-TrackedProcess `
     -WorkingDirectory $webRoot `
     -PidFile $frontendPidFile `
     -LogFile $frontendLog `
-    -ErrLogFile $frontendErrLog
+    -ErrLogFile $frontendErrLog `
+    -ExpectedProcessNames @("cmd.exe", "node.exe") `
+    -ExpectedCommandLinePattern "(npm\.cmd.+run.+dev.+--port.+5173)|(vite.+5173)"
 
 Write-Host "DiceFlow web services started."
 Write-Host "Backend : http://localhost:8001"

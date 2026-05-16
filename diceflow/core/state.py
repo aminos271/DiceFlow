@@ -14,6 +14,7 @@ from diceflow.core.lifecycle import (
     prepare_spawned_entity,
 )
 from diceflow.core.matching import match_entity_name
+from diceflow.core.models import Thread
 from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
 from diceflow.core.utils import dedupe_preserving_order
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
@@ -37,6 +38,7 @@ class GameState:
         self.recent_events: list[str] = []
         self.history: list[dict[str, Any]] = []
         self.entity_journal: list[dict[str, Any]] = []
+        self.threads: dict[str, Thread] = {}
 
     def apply_script_patch(self, patch: RuntimeScriptPatch | None) -> None:
         if not patch:
@@ -80,6 +82,7 @@ class GameState:
             "history": deepcopy(self.history[-20:]),
             "entity_journal": deepcopy(self.entity_journal[-10:]),
             "script_patches": deepcopy(self.script_patches[-10:]),
+            "threads": {tid: t.to_dict() for tid, t in self.threads.items()},
         }
 
     def get_visible_entities(self) -> dict[str, dict[str, Any]]:
@@ -222,6 +225,50 @@ class GameState:
 
         for key, value in changes.get("flags", {}).items():
             self.flags[key] = value
+
+        for thread_id, thread_data in changes.get("add_thread", {}).items():
+            if not isinstance(thread_data, dict):
+                continue
+            if thread_id in self.threads:
+                continue
+            thread_data.setdefault("id", thread_id)
+            thread_data.setdefault("last_updated_turn_id", self.turn_id)
+            thread = Thread.from_dict(thread_data)
+            if not thread.title:
+                continue
+            self.threads[thread_id] = thread
+
+        for thread_id, thread_data in changes.get("update_thread", {}).items():
+            if not isinstance(thread_data, dict) or thread_id not in self.threads:
+                continue
+            thread = self.threads[thread_id]
+            if "progress_delta" in thread_data:
+                try:
+                    progress_delta = int(thread_data["progress_delta"])
+                except (TypeError, ValueError):
+                    progress_delta = 0
+                thread.progress = max(0, min(100, thread.progress + progress_delta))
+            if "status" in thread_data:
+                value = thread_data["status"]
+                if value in Thread.VALID_STATUSES:
+                    thread.status = value
+                if value == "completed":
+                    thread.progress = 100
+                elif value == "failed":
+                    thread.progress = max(thread.progress, 0)
+            if "discovered" in thread_data:
+                thread.discovered = bool(thread_data["discovered"])
+            if "title" in thread_data:
+                thread.title = str(thread_data["title"])
+            if "next_hint" in thread_data:
+                thread.next_hint = str(thread_data["next_hint"]) if thread_data["next_hint"] else None
+            for list_key in ("related_entity_ids", "related_location_ids"):
+                if list_key in thread_data:
+                    value = thread_data[list_key]
+                    existing = getattr(thread, list_key)
+                    new_items = [str(i) for i in value] if isinstance(value, list) else []
+                    setattr(thread, list_key, list(dict.fromkeys(existing + new_items)))
+            thread.last_updated_turn_id = self.turn_id
 
         for event in changes.get("events", []):
             self.recent_events.append(str(event))

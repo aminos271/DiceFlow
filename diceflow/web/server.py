@@ -134,6 +134,7 @@ class StatusData(BaseModel):
     hostile_count: int
     hints: list[str]
     hint_groups: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    threads: list[dict[str, Any]] = Field(default_factory=list)
     is_game_over: bool = False
     ending: str | None = None
 
@@ -599,6 +600,7 @@ def _build_status(session) -> StatusData:
         hostile_count=hostile_count,
         hints=state.get_available_action_hints() or ["检查周围", "等待/观察局势"],
         hint_groups=_build_hint_groups(state),
+        threads=_build_thread_list(state),
         is_game_over=bool(state.flags.get("game_over")),
         ending=state.flags.get("ending"),
     )
@@ -618,6 +620,20 @@ def _build_hint_groups(state) -> dict[str, list[dict[str, str]]]:
         else:
             groups["recommended"].append(item)
     return {key: value for key, value in groups.items() if value}
+
+
+def _build_thread_list(state) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for thread in state.threads.values():
+        if not thread.discovered:
+            continue
+        if thread.status == "active":
+            result.append(thread.to_dict())
+        elif thread.status in ("completed", "failed"):
+            if state.turn_id - thread.last_updated_turn_id <= 3:
+                result.append(thread.to_dict())
+    result.sort(key=lambda t: (0 if t["status"] == "active" else 1, -t["last_updated_turn_id"]))
+    return result
 
 
 def _hint_detail(hint: str, state) -> str:

@@ -20,6 +20,8 @@ VALID_CHANGE_KEYS = {
     "reveal_entities",
     "move_item_to_inventory",
     "set_entity_states",
+    "add_thread",
+    "update_thread",
 }
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
@@ -334,6 +336,40 @@ def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has
         errors.append(f"{path}.move_item_to_inventory must be a list")
     if "set_entity_states" in changes and not isinstance(changes["set_entity_states"], dict):
         errors.append(f"{path}.set_entity_states must be a dict")
+    if "add_thread" in changes and not isinstance(changes["add_thread"], dict):
+        errors.append(f"{path}.add_thread must be a dict")
+    elif isinstance(changes.get("add_thread"), dict):
+        _validate_thread_changes(f"{path}.add_thread", changes["add_thread"], errors, is_add=True)
+    if "update_thread" in changes and not isinstance(changes["update_thread"], dict):
+        errors.append(f"{path}.update_thread must be a dict")
+    elif isinstance(changes.get("update_thread"), dict):
+        _validate_thread_changes(f"{path}.update_thread", changes["update_thread"], errors, is_add=False)
+
+
+def _validate_thread_changes(path: str, thread_changes: dict[str, Any], errors: list[str], *, is_add: bool) -> None:
+    for thread_id, data in thread_changes.items():
+        item_path = f"{path}.{thread_id}"
+        if not isinstance(data, dict):
+            errors.append(f"{item_path} must be a dict")
+            continue
+        if is_add and not isinstance(data.get("title"), str):
+            errors.append(f"{item_path}.title must be a string")
+        if "status" in data and data["status"] not in {"active", "completed", "failed"}:
+            errors.append(f"{item_path}.status must be active, completed, or failed")
+        if "progress" in data and not isinstance(data["progress"], int):
+            errors.append(f"{item_path}.progress must be an int")
+        if "progress_delta" in data and not isinstance(data["progress_delta"], int):
+            errors.append(f"{item_path}.progress_delta must be an int")
+        for list_key in ("related_entity_ids", "related_location_ids"):
+            if list_key in data and (
+                not isinstance(data[list_key], list)
+                or not all(isinstance(item, str) for item in data[list_key])
+            ):
+                errors.append(f"{item_path}.{list_key} must be a string list")
+        if "discovered" in data and not isinstance(data["discovered"], bool):
+            errors.append(f"{item_path}.discovered must be a bool")
+        if "next_hint" in data and data["next_hint"] is not None and not isinstance(data["next_hint"], str):
+            errors.append(f"{item_path}.next_hint must be a string or null")
 
 
 def _validate_ending_conditions(script: Script, errors: list[str]) -> None:

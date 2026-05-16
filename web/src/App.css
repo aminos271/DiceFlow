@@ -652,6 +652,74 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* ── Thread (Quest) Section ─────────────────────────────────────── */
+.thread-item {
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  border-left: 3px solid var(--border);
+  background: var(--surface2);
+  font-size: 12px;
+}
+
+.thread-item.active {
+  border-left-color: var(--yellow);
+}
+
+.thread-item.completed {
+  border-left-color: var(--green-dim);
+  opacity: 0.7;
+}
+
+.thread-item.failed {
+  border-left-color: var(--red-dim);
+  opacity: 0.7;
+}
+
+.thread-title {
+  color: var(--text-bright);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.thread-progress-outer {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  margin: 4px 0;
+  overflow: hidden;
+}
+
+.thread-progress-inner {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  background: var(--yellow);
+}
+
+.thread-progress-inner.completed {
+  background: var(--green);
+}
+
+.thread-progress-inner.failed {
+  background: var(--red);
+}
+
+.thread-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.thread-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 .entity-item {
   font-size: 13px;
   padding: 4px 6px;

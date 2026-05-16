@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
+from diceflow.core.models import Thread
 from diceflow.web import DATA_DIR, Session, SessionStore, _now_iso
 from diceflow.web.server import app
 from diceflow.content.worlds.loader import WORLDS_DIR
@@ -123,6 +124,42 @@ class TestGetSession:
         assert "turn_history" in body
         assert "status" in body
         assert body["is_game_over"] is False
+
+    def test_session_status_includes_threads(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        resp = client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "status" in body
+        assert "threads" in body["status"]
+        assert isinstance(body["status"]["threads"], list)
+        assert body["status"]["threads"] == []  # empty for new session
+
+    def test_session_status_hides_undiscovered_threads(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        session = isolated_store.get(sid)
+        session.game.state.threads["hidden_done"] = Thread(
+            id="hidden_done",
+            title="隐藏目标",
+            status="completed",
+            progress=100,
+            discovered=False,
+            last_updated_turn_id=session.game.state.turn_id,
+        )
+        session.game.state.threads["visible"] = Thread(
+            id="visible",
+            title="可见目标",
+            status="active",
+            progress=20,
+            discovered=True,
+        )
+
+        resp = client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        threads = resp.json()["status"]["threads"]
+        assert [t["id"] for t in threads] == ["visible"]
 
     def test_get_nonexistent_session(self, isolated_store):
         resp = client.get("/api/sessions/deadbeef1234")
