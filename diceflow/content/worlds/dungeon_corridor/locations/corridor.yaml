@@ -1,0 +1,7 @@
+id: corridor_start
+title: 地牢走廊
+aliases: [走廊]
+summary: "一条阴暗狭长的石质通道，尽头是一扇铁门。"
+content: |
+  骷髅守卫在这里缓慢巡逻，而角落里那个木箱像是某个倒霉囚徒留下的最后机会。
+tags: [室内, 狭窄, 危险]

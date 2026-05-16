@@ -36,6 +36,20 @@ function Stop-TrackedProcess {
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
+function Stop-MatchingProcessTree {
+    param(
+        [string]$ProcessName,
+        [string]$CommandLinePattern
+    )
+
+    $matches = Get-CimInstance Win32_Process |
+        Where-Object { $_.Name -eq $ProcessName -and $_.CommandLine -match $CommandLinePattern }
+
+    foreach ($match in $matches) {
+        & taskkill /PID $match.ProcessId /T /F | Out-Null
+    }
+}
+
 function Start-TrackedProcess {
     param(
         [string]$FilePath,
@@ -72,9 +86,12 @@ if (-not (Test-Path (Join-Path $webRoot "node_modules"))) {
     }
 }
 
+Stop-MatchingProcessTree -ProcessName "python.exe" -CommandLinePattern "uvicorn.+diceflow\.web\.server:app"
+Stop-MatchingProcessTree -ProcessName "node.exe" -CommandLinePattern "vite.+5173"
+
 $backend = Start-TrackedProcess `
     -FilePath "python" `
-    -ArgumentList @("-m", "uvicorn", "diceflow.web.server:app", "--reload", "--port", "8000") `
+    -ArgumentList @("-m", "uvicorn", "diceflow.web.server:app", "--reload", "--port", "8001") `
     -WorkingDirectory $repoRoot `
     -PidFile $backendPidFile `
     -LogFile $backendLog `
@@ -89,7 +106,7 @@ $frontend = Start-TrackedProcess `
     -ErrLogFile $frontendErrLog
 
 Write-Host "DiceFlow web services started."
-Write-Host "Backend : http://localhost:8000"
+Write-Host "Backend : http://localhost:8001"
 Write-Host "Frontend: http://localhost:5173"
 Write-Host "Backend PID : $($backend.Id)"
 Write-Host "Frontend PID: $($frontend.Id)"

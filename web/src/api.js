@@ -20,17 +20,23 @@ export function listWorlds() {
   return request('/worlds')
 }
 
-export function createSession(scriptId, useLLM = true) {
-  // Support both old (string) and new (object with script_id/world_id) signatures
-  if (typeof scriptId === 'object') {
+export function createWorld(payload) {
+  return request('/worlds', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function createSession(worldOrOptions, useLLM = true) {
+  if (typeof worldOrOptions === 'object') {
     return request('/sessions', {
       method: 'POST',
-      body: JSON.stringify({ ...scriptId, use_llm: useLLM }),
+      body: JSON.stringify({ ...worldOrOptions, use_llm: useLLM }),
     })
   }
   return request('/sessions', {
     method: 'POST',
-    body: JSON.stringify({ script_id: scriptId, use_llm: useLLM }),
+    body: JSON.stringify({ world_id: worldOrOptions, use_llm: useLLM }),
   })
 }
 

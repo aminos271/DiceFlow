@@ -1,0 +1,10 @@
+id: skeleton_guard_char
+title: 骷髅守卫
+aliases: [骷髅, 守卫]
+summary: "特质: 脆弱, 麻木, 执行命令；举止: 迟缓而机械；它会攻击任何试图接近铁门的人。"
+content: |
+  这具骷髅并没有真正的意志，只在残存的命令驱动下反复巡逻。
+
+  它的动作并不快，但在狭窄走廊里仍足够致命。
+tags: [npc, undead, 守卫]
+linked_entity_id: skeleton_1

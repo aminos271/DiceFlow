@@ -1,0 +1,7 @@
+{
+  "id": "dungeon_corridor",
+  "title": "地牢走廊",
+  "description": "一条阴暗狭长的走廊，一只骷髅守卫，一扇铁门，一个也许藏着钥匙的木箱。",
+  "script_ids": [],
+  "default_tags": ["地牢", "逃脱", "战斗", "谜题"]
+}

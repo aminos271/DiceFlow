@@ -74,37 +74,27 @@ class SessionStore:
         world_id: str | None = None,
         use_llm: bool = True,
     ) -> Session:
-        """Create a session from script_id, world_id, or defaults.
+        """Create a session from world content only.
 
-        Priority: script_id > world_id > default bootstrap.
+        Legacy script_id-based sessions are no longer supported for new games.
         """
         session_id = uuid.uuid4().hex[:12]
         now = _now_iso()
         lorebook = SessionLore()
-
         if script_id:
-            # ── Legacy: load from YAML script ──────────────────
-            game = Game(script=load_script(script_id), use_llm=use_llm, lorebook=lorebook)
-            display_name = str(game.script.get("title") or script_id)
-            bootstrap_data = None
-        elif world_id:
-            # ── Bootstrap from world content ────────────────────
-            lorebook.seed_from_world_content_for_id(world_id)
-            bootstrap = bootstrap_from_lorebook(lorebook, world_id) or bootstrap_from_defaults(world_id)
-            game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
-            display_name = bootstrap.title
-            bootstrap_data = bootstrap.to_script_dict()
-        else:
-            # ── Default bootstrap ────────────────────────────────
-            bootstrap = bootstrap_from_defaults()
-            game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
-            display_name = bootstrap.title
-            bootstrap_data = bootstrap.to_script_dict()
+            raise ValueError("script-driven sessions are no longer supported; use world_id")
+
+        effective_world_id = world_id or "_default"
+        bootstrap = bootstrap_from_lorebook(lorebook, effective_world_id) or bootstrap_from_defaults(effective_world_id)
+        lorebook.seed_from_world_content_for_id(effective_world_id, bootstrap.entities)
+        game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
+        display_name = bootstrap.title
+        bootstrap_data = bootstrap.to_script_dict()
 
         session = Session(
             session_id=session_id,
-            script_id=script_id,
-            world_id=world_id,
+            script_id=None,
+            world_id=effective_world_id,
             display_name=display_name,
             created_at=now,
             updated_at=now,
@@ -113,8 +103,6 @@ class SessionStore:
             lorebook=lorebook,
             bootstrap_data=bootstrap_data,
         )
-        if script_id:
-            session.lorebook.seed_from_script(game.script)
         self.sessions[session_id] = session
         self.save_to_disk(session)
         return session
@@ -235,6 +223,11 @@ def _make_restored_game(
             scene_actions=bootstrap_data.get("scene_actions", {}),
             dynamic_entity_templates=bootstrap_data.get("dynamic_entity_templates", {}),
             generic_rules=bootstrap_data.get("generic_rules", []),
+            action_rules=bootstrap_data.get("action_rules", []),
+            dc_modifiers=bootstrap_data.get("dc_modifiers", []),
+            derivation_rules=bootstrap_data.get("derivation_rules", []),
+            reaction_rules=bootstrap_data.get("reaction_rules", []),
+            runtime_generation_hooks=bootstrap_data.get("runtime_generation_hooks", []),
             invalid_action_event=str(bootstrap_data.get("invalid_action_event", "行动没有成立，但局势仍在推进。")),
             default_no_outcome_event=str(bootstrap_data.get("default_no_outcome_event", "局势发生了变化，你必须立刻决定下一步。")),
             ending_texts=bootstrap_data.get("ending_texts", {}),
@@ -246,8 +239,8 @@ def _make_restored_game(
 
     if world_id:
         lore = lorebook or SessionLore()
-        lore.seed_from_world_content_for_id(world_id)
         bootstrap = bootstrap_from_lorebook(lore, world_id) or bootstrap_from_defaults(world_id)
+        lore.seed_from_world_content_for_id(world_id, bootstrap.entities)
         game = Game(script=bootstrap, use_llm=use_llm, lorebook=lore)
         if isinstance(snapshot, dict):
             _restore_snapshot_bootstrap(game, snapshot)

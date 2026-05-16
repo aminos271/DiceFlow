@@ -177,7 +177,7 @@ GENERIC_DEFAULT_ENTITY_ACTIONS: dict[str, list[str]] = {
 
 @dataclass
 class WorldBootstrap:
-    """Minimal structured data to initialize a GameState without a YAML script."""
+    """Structured data to initialize a GameState without a YAML script."""
     world_id: str
     title: str
     intro: str = ""
@@ -193,6 +193,11 @@ class WorldBootstrap:
     scene_actions: dict = field(default_factory=dict)
     dynamic_entity_templates: dict = field(default_factory=dict)
     generic_rules: list[dict] = field(default_factory=list)
+    action_rules: list[dict] = field(default_factory=list)
+    dc_modifiers: list[dict] = field(default_factory=list)
+    derivation_rules: list[dict] = field(default_factory=list)
+    reaction_rules: list[dict] = field(default_factory=list)
+    runtime_generation_hooks: list[dict] = field(default_factory=list)
     invalid_action_event: str = "行动没有成立，但局势仍在推进。"
     default_no_outcome_event: str = "局势发生了变化，你必须立刻决定下一步。"
     ending_texts: dict = field(default_factory=dict)
@@ -201,8 +206,9 @@ class WorldBootstrap:
         """Produce a dict that satisfies the minimal Script interface."""
         return {
             "id": self.world_id,
-            "schema_version": 2,
+            "schema_version": 1,
             "title": self.title,
+            "world_id": self.world_id,
             "intro": self.intro,
             "player": deepcopy(self.player),
             "scene": deepcopy(self.scene),
@@ -213,6 +219,11 @@ class WorldBootstrap:
             "scene_actions": deepcopy(self.scene_actions),
             "dynamic_entity_templates": deepcopy(self.dynamic_entity_templates),
             "generic_rules": deepcopy(self.generic_rules),
+            "action_rules": deepcopy(self.action_rules),
+            "dc_modifiers": deepcopy(self.dc_modifiers),
+            "derivation_rules": deepcopy(self.derivation_rules),
+            "reaction_rules": deepcopy(self.reaction_rules),
+            "runtime_generation_hooks": deepcopy(self.runtime_generation_hooks),
             "invalid_action_event": self.invalid_action_event,
             "default_no_outcome_event": self.default_no_outcome_event,
             "ending_texts": deepcopy(self.ending_texts),
@@ -243,6 +254,11 @@ def bootstrap_from_lorebook(lorebook: Any, world_id: str | None = None) -> World
 
     # ── Extract from lorebook ────────────────────────────────────
     entries_by_type = _extract_lorebook_entries(lorebook)
+
+    if world_content:
+        detailed_bootstrap = _bootstrap_from_world_config(world_content, effective_world_id)
+        if detailed_bootstrap is not None:
+            return detailed_bootstrap
 
     # ── Build title and intro ─────────────────────────────────────
     title = ""
@@ -417,6 +433,43 @@ def _extract_lorebook_entries(lorebook: Any) -> dict[str, list[dict[str, Any]]]:
     except Exception:
         pass
     return result
+
+
+def _bootstrap_from_world_config(
+    world_content: dict[str, Any],
+    world_id: str | None,
+) -> WorldBootstrap | None:
+    config = world_content.get("bootstrap")
+    if not isinstance(config, dict):
+        return None
+
+    meta = world_content.get("meta", {})
+    effective_world_id = str(world_id or meta.get("id") or config.get("world_id") or config.get("id") or "")
+    title = str(config.get("title") or meta.get("title") or effective_world_id or "未知世界")
+    intro = str(config.get("intro") or meta.get("description") or "")
+
+    return WorldBootstrap(
+        world_id=effective_world_id,
+        title=title,
+        intro=intro,
+        player=deepcopy(config.get("player", {})),
+        scene=deepcopy(config.get("scene", {})),
+        entities=deepcopy(config.get("entities", {})),
+        flags=deepcopy(config.get("flags", {})),
+        ending_conditions=deepcopy(config.get("ending_conditions", [])),
+        world=deepcopy(config.get("world")),
+        scene_actions=deepcopy(config.get("scene_actions", {})),
+        dynamic_entity_templates=deepcopy(config.get("dynamic_entity_templates", {})),
+        generic_rules=deepcopy(config.get("generic_rules", [])),
+        action_rules=deepcopy(config.get("action_rules", [])),
+        dc_modifiers=deepcopy(config.get("dc_modifiers", [])),
+        derivation_rules=deepcopy(config.get("derivation_rules", [])),
+        reaction_rules=deepcopy(config.get("reaction_rules", [])),
+        runtime_generation_hooks=deepcopy(config.get("runtime_generation_hooks", [])),
+        invalid_action_event=str(config.get("invalid_action_event", "行动没有成立，但局势仍在推进。")),
+        default_no_outcome_event=str(config.get("default_no_outcome_event", "局势发生了变化，你必须立刻决定下一步。")),
+        ending_texts=deepcopy(config.get("ending_texts", {})),
+    )
 
 
 def _character_to_entity(char: dict[str, Any], default_id: str) -> dict[str, Any]:

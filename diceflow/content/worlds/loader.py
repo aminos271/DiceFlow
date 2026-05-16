@@ -10,7 +10,8 @@ WORLDS_DIR = Path(__file__).resolve().parent
 
 
 def world_exists(world_id: str) -> bool:
-    return (WORLDS_DIR / world_id).is_dir()
+    world_dir = WORLDS_DIR / world_id
+    return world_dir.is_dir() and (world_dir / "world.json").exists()
 
 
 def load_world_meta(world_id: str) -> dict[str, Any] | None:
@@ -35,11 +36,22 @@ def load_world_content(world_id: str) -> dict[str, Any] | None:
 
     return {
         "meta": meta,
+        "bootstrap": _load_structured_file(world_dir / "bootstrap.yaml"),
         "world_book": _load_yaml_entries(world_dir / "world_book"),
         "locations": _load_yaml_entries(world_dir / "locations"),
         "characters": _load_yaml_entries(world_dir / "characters"),
         "important_events": _load_yaml_entries(world_dir / "important_events"),
     }
+
+
+def _load_structured_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError):
+        return None
+    return raw if isinstance(raw, dict) else None
 
 
 def _load_yaml_entries(subdir: Path) -> list[dict[str, Any]]:

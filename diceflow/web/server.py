@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import yaml
+import json
+import re
+import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +12,10 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import yaml
 
 from diceflow.app.game import META_HELP, META_HINT, META_INV, META_LOOK, META_STATUS
 from diceflow.content.worlds.loader import WORLDS_DIR, load_world_meta, world_exists
-from diceflow.scripting.loader import SCRIPT_DIR
 from diceflow.web import SessionStore
 
 app = FastAPI(title="DiceFlow API")
@@ -49,6 +52,21 @@ class WorldInfo(BaseModel):
     id: str
     title: str
     description: str
+
+
+class WorldCreateRequest(BaseModel):
+    id: str | None = None
+    title: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=400)
+    intro: str = ""
+    scene_name: str = Field(default="起点", max_length=80)
+    scene_description: str = ""
+    premise: str = ""
+    tone: str = ""
+    player_inventory: list[str] = Field(default_factory=list)
+    initial_npc_name: str | None = Field(default=None, max_length=80)
+    initial_npc_summary: str = ""
+    bootstrap_yaml: str = ""
 
 
 class ScriptInfo(BaseModel):
@@ -124,20 +142,7 @@ class StatusData(BaseModel):
 
 @app.get("/api/scripts")
 def list_scripts() -> list[ScriptInfo]:
-    scripts: list[ScriptInfo] = []
-    for script_path in sorted(SCRIPT_DIR.glob("*.yaml")):
-        try:
-            raw = yaml.safe_load(script_path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError):
-            continue
-        if not isinstance(raw, dict):
-            continue
-        scripts.append(ScriptInfo(
-            id=str(raw.get("id") or script_path.stem),
-            title=str(raw.get("title") or script_path.stem),
-            intro=str(raw.get("intro") or ""),
-        ))
-    return scripts
+    return []
 
 
 @app.get("/api/worlds")
@@ -167,13 +172,59 @@ def list_worlds() -> list[WorldInfo]:
     return worlds
 
 
+@app.post("/api/worlds")
+def create_world(body: WorldCreateRequest) -> dict[str, Any]:
+    world_id = _normalize_world_id(body.id, body.title)
+    world_dir = WORLDS_DIR / world_id
+    if world_dir.exists():
+        raise HTTPException(status_code=409, detail=f"world already exists: {world_id}")
+
+    bootstrap = _build_world_bootstrap(body, world_id)
+    meta = {
+        "id": world_id,
+        "title": body.title.strip(),
+        "description": body.description.strip(),
+        "script_ids": [],
+        "default_tags": _default_tags_for_world(body),
+    }
+
+    try:
+        world_dir.mkdir(parents=True, exist_ok=False)
+        (world_dir / "world_book").mkdir(exist_ok=True)
+        (world_dir / "locations").mkdir(exist_ok=True)
+        (world_dir / "characters").mkdir(exist_ok=True)
+        (world_dir / "important_events").mkdir(exist_ok=True)
+
+        (world_dir / "world.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (world_dir / "bootstrap.yaml").write_text(
+            yaml.safe_dump(bootstrap, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        _write_seed_files(world_dir, body, bootstrap)
+    except Exception:
+        _remove_world_dir(world_dir)
+        raise
+
+    return {
+        "world": {
+            "id": world_id,
+            "title": meta["title"],
+            "description": meta["description"],
+        }
+    }
+
+
 @app.post("/api/sessions")
 def create_session(body: CreateSessionRequest) -> dict[str, Any]:
     if body.script_id:
-        script_path = SCRIPT_DIR / f"{body.script_id}.yaml"
-        if not script_path.exists():
-            raise HTTPException(status_code=404, detail=f"script not found: {body.script_id}")
-    session = store.create(script_id=body.script_id, world_id=body.world_id, use_llm=body.use_llm)
+        raise HTTPException(status_code=422, detail="script-driven sessions have been removed; use world_id")
+    try:
+        session = store.create(script_id=None, world_id=body.world_id, use_llm=body.use_llm)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "session_id": session.session_id,
         "script_id": session.script_id,
@@ -691,6 +742,231 @@ def _validate_linked_entity(session, linked_entity_id: str | None) -> None:
             status_code=422,
             detail=f"linked_entity_id references unknown entity: {linked_entity_id}",
         )
+
+
+def _normalize_world_id(raw_id: str | None, title: str) -> str:
+    text = (raw_id or "").strip().lower()
+    if not text:
+        ascii_slug = re.sub(r"[^a-z0-9]+", "_", title.strip().lower()).strip("_")
+        text = ascii_slug or f"world_{uuid.uuid4().hex[:8]}"
+    text = re.sub(r"[^a-z0-9_]+", "_", text).strip("_")
+    if not text:
+        text = f"world_{uuid.uuid4().hex[:8]}"
+    if text.startswith("_") and text != "_default":
+        text = text.lstrip("_") or f"world_{uuid.uuid4().hex[:8]}"
+    return text
+
+
+def _build_world_bootstrap(body: WorldCreateRequest, world_id: str) -> dict[str, Any]:
+    if body.bootstrap_yaml.strip():
+        try:
+            parsed = yaml.safe_load(body.bootstrap_yaml)
+        except yaml.YAMLError as exc:
+            raise HTTPException(status_code=422, detail=f"bootstrap_yaml 解析失败: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=422, detail="bootstrap_yaml 必须是 YAML 对象")
+        parsed.setdefault("player", {"hp": 10, "max_hp": 10, "inventory": [], "location": body.scene_name})
+        parsed.setdefault("scene", {"name": body.scene_name, "description": body.scene_description})
+        parsed.setdefault("flags", {"game_over": False, "ending": ""})
+        parsed.setdefault("world", {})
+        parsed.setdefault("entities", {})
+        parsed.setdefault("scene_actions", {})
+        parsed.setdefault("ending_conditions", [
+            {"when": {"turn_id_gte": 20}, "ending": "timeout"},
+            {"when": {"player_hp_lte": 0}, "ending": "death"},
+        ])
+        return parsed
+
+    npc_entities: dict[str, Any] = {}
+    if body.initial_npc_name and body.initial_npc_name.strip():
+        npc_entities["npc_1"] = {
+            "name": body.initial_npc_name.strip(),
+            "type": "npc",
+            "hp": 5,
+            "max_hp": 5,
+            "alive": True,
+            "favorability": 0,
+            "disposition": "neutral",
+            "personality": {
+                "traits": ["谨慎"],
+                "manner": "先观察再回应",
+                "motivation": body.initial_npc_summary.strip() or "想先判断你是否可信。",
+            },
+            "tags": ["npc"],
+            "metadata": {
+                "allowed_actions": ["talk", "inspect"],
+                "actions": {
+                    "talk": {
+                        "dc": 8,
+                        "outcomes": {
+                            "success": {"events": [f"{body.initial_npc_name.strip()}愿意继续和你交谈。"]},
+                            "fail": {"events": [f"{body.initial_npc_name.strip()}只是敷衍地点了点头。"]},
+                        },
+                    },
+                    "inspect": {
+                        "dc": 6,
+                        "outcomes": {
+                            "success": {"events": [f"你注意到{body.initial_npc_name.strip()}似乎在有意隐藏情绪。"]},
+                        },
+                    },
+                },
+            },
+        }
+
+    return {
+        "title": body.title.strip(),
+        "intro": body.intro.strip() or body.description.strip() or f"你来到{body.title.strip()}。",
+        "player": {
+            "hp": 10,
+            "max_hp": 10,
+            "inventory": list(body.player_inventory),
+            "location": body.scene_name.strip() or "起点",
+        },
+        "scene": {
+            "name": body.scene_name.strip() or "起点",
+            "description": body.scene_description.strip() or body.description.strip(),
+        },
+        "flags": {"game_over": False, "ending": ""},
+        "world": {
+            "premise": body.premise.strip() or body.description.strip(),
+            "tone": body.tone.strip(),
+            "allowed_scene_types": ["tavern", "street", "corridor", "chamber", "wilderness"],
+            "allowed_entity_types": ["npc", "pickup", "container", "door", "obstacle", "clue", "item"],
+            "forbidden": [],
+            "max_runtime_dc": 14,
+            "max_new_entities_per_transition": 3,
+        },
+        "entities": npc_entities,
+        "scene_actions": {
+            "wait": {
+                "dc": 6,
+                "outcomes": {
+                    "success": {"events": ["你暂时按兵不动，观察局势的变化。"]},
+                    "fail": {"events": ["你等了一会，但暂时没有新的变化。"]},
+                },
+            },
+            "inspect": {
+                "dc": 8,
+                "outcomes": {
+                    "success": {"events": ["你耐心地观察周围，找到了一些可继续追查的细节。"]},
+                    "fail": {"events": ["你四下查看，但一时没有发现新的收获。"]},
+                },
+            },
+        },
+        "dynamic_entity_templates": {
+            "discover_clue": {
+                "type": "clue",
+                "name": "新发现的线索",
+                "aliases": ["线索", "痕迹"],
+                "tags": ["clue", "dynamic"],
+                "metadata": {
+                    "allowed_actions": ["inspect"],
+                    "actions": {
+                        "inspect": {
+                            "dc": 8,
+                            "outcomes": {
+                                "success": {"events": ["这条线索让你对当前世界有了更明确的判断。"]},
+                            },
+                        }
+                    },
+                },
+            },
+            "social": {
+                "type": "npc",
+                "name": "路过的旅人",
+                "tags": ["npc", "dynamic"],
+            },
+        },
+        "ending_conditions": [
+            {"when": {"turn_id_gte": 20}, "ending": "timeout"},
+            {"when": {"player_hp_lte": 0}, "ending": "death"},
+        ],
+        "default_no_outcome_event": "局势发生了变化，你必须立刻决定下一步。",
+        "invalid_action_event": "行动没有成立，但世界并不会因此停下。",
+        "ending_texts": {
+            "timeout": "你拖得太久，机会从指缝间溜走了。",
+            "death": "你的冒险到此为止。",
+        },
+    }
+
+
+def _default_tags_for_world(body: WorldCreateRequest) -> list[str]:
+    tags = []
+    if body.tone.strip():
+        tags.append(body.tone.strip())
+    if body.scene_name.strip():
+        tags.append(body.scene_name.strip())
+    tags.append("自定义")
+    seen: set[str] = set()
+    result: list[str] = []
+    for tag in tags:
+        if tag and tag not in seen:
+            seen.add(tag)
+            result.append(tag)
+    return result
+
+
+def _write_seed_files(world_dir: Path, body: WorldCreateRequest, bootstrap: dict[str, Any]) -> None:
+    overview = {
+        "id": "overview",
+        "title": f"{body.title.strip()}概览",
+        "summary": body.description.strip(),
+        "content": body.premise.strip() or body.description.strip(),
+        "tags": ["自定义", "概览"],
+    }
+    (world_dir / "world_book" / "overview.yaml").write_text(
+        yaml.safe_dump(overview, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    location = {
+        "id": "start",
+        "title": body.scene_name.strip() or "起点",
+        "aliases": [body.scene_name.strip() or "起点"],
+        "summary": body.scene_description.strip(),
+        "content": body.scene_description.strip(),
+        "tags": ["起点", "自定义"],
+    }
+    (world_dir / "locations" / "start.yaml").write_text(
+        yaml.safe_dump(location, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    entities = bootstrap.get("entities", {})
+    if isinstance(entities, dict):
+        for entity_id, entity in entities.items():
+            if not isinstance(entity, dict):
+                continue
+            entity_tags = [str(tag) for tag in entity.get("tags", [])]
+            if str(entity.get("type") or "") != "npc" and "npc" not in entity_tags:
+                continue
+            personality = entity.get("personality", {}) if isinstance(entity.get("personality"), dict) else {}
+            summary_parts = []
+            traits = personality.get("traits", [])
+            if traits:
+                summary_parts.append(f"特质: {', '.join(str(t) for t in traits)}")
+            if personality.get("manner"):
+                summary_parts.append(f"举止: {personality.get('manner')}")
+            if personality.get("motivation"):
+                summary_parts.append(str(personality.get("motivation")))
+            npc_doc = {
+                "id": entity_id,
+                "title": str(entity.get("name") or entity_id),
+                "aliases": [str(a) for a in entity.get("aliases", [])],
+                "summary": "；".join(summary_parts),
+                "content": str(personality.get("motivation") or ""),
+                "tags": entity_tags or ["npc"],
+                "linked_entity_id": entity_id,
+            }
+            (world_dir / "characters" / f"{entity_id}.yaml").write_text(
+                yaml.safe_dump(npc_doc, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+
+
+def _remove_world_dir(world_dir: Path) -> None:
+    if world_dir.exists():
+        shutil.rmtree(world_dir, ignore_errors=True)
 
 
 def _help_text() -> str:

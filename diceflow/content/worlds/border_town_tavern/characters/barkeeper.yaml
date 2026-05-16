@@ -1,0 +1,10 @@
+id: barkeeper_char
+title: 酒馆老板
+aliases: [老板, 店主]
+summary: "特质: 务实, 谨慎, 观察力敏锐；举止: 平淡但可靠；经营酒馆多年，不轻易信任陌生人。"
+content: |
+  酒馆老板并不热情，但他知道哪些人值得投资一句忠告。
+
+  如果你表现得像个靠谱的人，他也许会给你一条真正有用的消息。
+tags: [npc, 酒馆, 情报]
+linked_entity_id: barkeeper

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from diceflow.web import DATA_DIR, Session, SessionStore, _now_iso
 from diceflow.web.server import app
+from diceflow.content.worlds.loader import WORLDS_DIR
 
 client = TestClient(app)
 
@@ -25,8 +27,8 @@ def isolated_store():
             yield store
 
 
-def _create_session(store, script_id="tomb_entrance", use_llm=False):
-    resp = client.post("/api/sessions", json={"script_id": script_id, "use_llm": use_llm})
+def _create_session(store, world_id="tomb_entrance", use_llm=False):
+    resp = client.post("/api/sessions", json={"world_id": world_id, "use_llm": use_llm})
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -36,19 +38,15 @@ class TestListScripts:
         resp = client.get("/api/scripts")
         assert resp.status_code == 200
         scripts = resp.json()
-        assert isinstance(scripts, list)
-        assert len(scripts) >= 1
-        for s in scripts:
-            assert "id" in s
-            assert "title" in s
-            assert "intro" in s
+        assert scripts == []
 
 
 class TestCreateSession:
     def test_create_session(self, isolated_store):
         data = _create_session(isolated_store)
         assert "session_id" in data
-        assert data["script_id"] == "tomb_entrance"
+        assert data["script_id"] is None
+        assert data["world_id"] == "tomb_entrance"
         assert "created_at" in data
         assert len(data["session_id"]) == 12
 
@@ -61,7 +59,54 @@ class TestCreateSession:
 
     def test_create_session_invalid_script(self, isolated_store):
         resp = client.post("/api/sessions", json={"script_id": "nonexistent_script"})
-        assert resp.status_code == 404
+        assert resp.status_code == 422
+
+
+class TestCreateWorld:
+    def test_create_world(self, isolated_store):
+        world_dir = WORLDS_DIR / "test_custom_world"
+        shutil.rmtree(world_dir, ignore_errors=True)
+        resp = client.post(
+            "/api/worlds",
+            json={
+                "id": "test_custom_world",
+                "title": "测试世界",
+                "description": "一个用于 API 测试的新世界。",
+                "scene_name": "测试大厅",
+                "scene_description": "这里堆满了待验证的状态。",
+                "initial_npc_name": "测试员",
+                "initial_npc_summary": "负责检查一切是否正常。",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["world"]["id"] == "test_custom_world"
+        assert world_dir.exists()
+        assert (world_dir / "world.json").exists()
+        assert (world_dir / "bootstrap.yaml").exists()
+        shutil.rmtree(world_dir, ignore_errors=True)
+
+    def test_created_world_can_start_session(self, isolated_store):
+        world_dir = WORLDS_DIR / "apitest_world"
+        shutil.rmtree(world_dir, ignore_errors=True)
+        resp = client.post(
+            "/api/worlds",
+            json={
+                "id": "apitest_world",
+                "title": "接口测试世界",
+                "description": "用于验证世界创建后能否直接开局。",
+                "scene_name": "测试入口",
+                "scene_description": "一切都应该已经准备好了。",
+                "initial_npc_name": "门房",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        resp = client.post("/api/sessions", json={"world_id": "apitest_world", "use_llm": False})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["world_id"] == "apitest_world"
+        shutil.rmtree(world_dir, ignore_errors=True)
 
 
 class TestGetSession:
@@ -72,7 +117,8 @@ class TestGetSession:
         assert resp.status_code == 200
         body = resp.json()
         assert body["session_id"] == sid
-        assert body["script_id"] == "tomb_entrance"
+        assert body["script_id"] is None
+        assert body["world_id"] == "tomb_entrance"
         assert "snapshot" in body
         assert "turn_history" in body
         assert "status" in body
@@ -91,7 +137,7 @@ class TestListSessions:
 
     def test_list_sessions_with_data(self, isolated_store):
         _create_session(isolated_store)
-        _create_session(isolated_store, script_id="dungeon_corridor")
+        _create_session(isolated_store, world_id="_default")
         resp = client.get("/api/sessions")
         assert resp.status_code == 200
         sessions = resp.json()
@@ -124,7 +170,7 @@ class TestRunTurn:
         assert resp.status_code == 404
 
     def test_run_turn_force_critical_success(self, isolated_store):
-        data = _create_session(isolated_store, script_id="border_town_tavern", use_llm=False)
+        data = _create_session(isolated_store, world_id="_default", use_llm=False)
         sid = data["session_id"]
 
         resp = client.post(
@@ -139,7 +185,7 @@ class TestRunTurn:
 
     def test_force_critical_one_shot_does_not_carry_to_next_turn(self, isolated_store):
         """force_critical=True should only affect the immediate turn, not subsequent ones."""
-        data = _create_session(isolated_store, script_id="border_town_tavern", use_llm=False)
+        data = _create_session(isolated_store, world_id="_default", use_llm=False)
         sid = data["session_id"]
 
         # Turn 1 — force critical
@@ -269,7 +315,8 @@ class TestSessionPersistence:
 
         raw = json.loads(filepath.read_text(encoding="utf-8"))
         assert raw["session_id"] == sid
-        assert raw["script_id"] == "tomb_entrance"
+        assert raw["script_id"] is None
+        assert raw["world_id"] == "tomb_entrance"
         assert len(raw["turn_history"]) == 1
         assert "snapshot" in raw
 
@@ -287,7 +334,8 @@ class TestSessionPersistence:
 
         assert sid in store2.sessions
         loaded = store2.sessions[sid]
-        assert loaded.script_id == "tomb_entrance"
+        assert loaded.script_id is None
+        assert loaded.world_id == "tomb_entrance"
         assert len(loaded.turn_history) == 1
 
     def test_loaded_session_can_continue(self, isolated_store):
@@ -509,25 +557,18 @@ class TestKnownEntities:
                 assert field in ent, f"Missing field '{field}' in entity {ent['id']}"
 
     def test_revealed_entity_appears_in_known_entities(self, isolated_store):
-        """After an action reveals a hidden entity, it must show up."""
-        data = _create_session(isolated_store, script_id="dungeon_corridor")
+        """Sanity: generated entities must show up in known_entities after creation."""
+        data = _create_session(isolated_store, world_id="tomb_entrance")
         sid = data["session_id"]
-
-        # iron_key starts hidden — verify it is NOT known yet
-        resp = client.get(f"/api/sessions/{sid}")
-        known_ids = {e["id"] for e in resp.json()["status"]["known_entities"]}
-        assert "iron_key" not in known_ids, "iron_key is hidden at start"
-
-        # Open the chest with forced_roll=15 to guarantee success
         resp = client.post(
             f"/api/sessions/{sid}/turns",
-            json={"input": "打开木箱", "forced_roll": 15},
+            json={"input": "搜索周围有没有线索", "forced_roll": 20},
         )
         assert resp.status_code == 200, resp.text
         known = resp.json()["status"]["known_entities"]
-        key = next((e for e in known if e["id"] == "iron_key"), None)
-        assert key is not None, "iron_key must appear in known_entities after being revealed"
-        assert key["name"] == "铁钥匙"
+        generated = next((e for e in known if e["id"].startswith("dynamic_")), None)
+        assert generated is not None, "generated entity must appear in known_entities after creation"
+        assert generated["name"] in {"墙上的划痕", "古旧徽章", "受伤的探险者", "暗格", "松动砖缝"}
 
     def test_visible_count_matches_expected(self, isolated_store):
         """Sanity: known_entities visible subset == visible_entities count."""
@@ -1107,14 +1148,14 @@ class TestLorebook:
         assert guard_entry["linked_entity_id"] in session.game.state.entities
 
     def test_fallback_when_no_world_id_in_script(self, isolated_store):
-        """Script without world_id uses old inline seed logic."""
-        data = _create_session(isolated_store, script_id="dungeon_corridor")
+        """Default world bootstrap still seeds lorebook entries."""
+        data = _create_session(isolated_store, world_id="_default")
         sid = data["session_id"]
         resp = client.get(f"/api/sessions/{sid}/lorebook")
         entries = resp.json()["entries"]
-        # dungeon_corridor has no world_id, should seed from inline fields
-        assert len(entries["world_entries"]) >= 1
-        for e in entries["world_entries"]:
+        seeded = entries["world_entries"] + entries["location_entries"] + entries["character_entries"]
+        assert len(seeded) >= 1
+        for e in seeded:
             assert e["source"] == "script_seed"
 
     def test_lorebook_imports_world_loader(self):

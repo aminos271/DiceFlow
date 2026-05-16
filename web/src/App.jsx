@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
-import { listScripts, listWorlds, createSession, listSessions } from './api.js'
+import { listWorlds, createSession, listSessions, createWorld } from './api.js'
 import ScriptSelect from './pages/ScriptSelect.jsx'
 import GamePage from './pages/GamePage.jsx'
 import SessionHistory from './components/SessionHistory.jsx'
+import WorldCreateModal from './components/WorldCreateModal.jsx'
 
 export default function App() {
   const [view, setView] = useState('select')
-  const [scripts, setScripts] = useState([])
   const [worlds, setWorlds] = useState([])
   const [sessionId, setSessionId] = useState(null)
-  const [scriptTitle, setScriptTitle] = useState('')
+  const [sessionTitle, setSessionTitle] = useState('')
   const [sessions, setSessions] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+  const [showCreateWorld, setShowCreateWorld] = useState(false)
 
   useEffect(() => {
-    listScripts().then(setScripts).catch(console.error)
     listWorlds().then(setWorlds).catch(console.error)
     refreshSessions()
   }, [])
@@ -23,23 +23,11 @@ export default function App() {
     listSessions().then(setSessions).catch(console.error)
   }, [])
 
-  const handleSelectScript = async (scriptId, title) => {
-    try {
-      const data = await createSession(scriptId)
-      setSessionId(data.session_id)
-      setScriptTitle(title)
-      setView('game')
-      refreshSessions()
-    } catch (err) {
-      alert(`创建失败: ${err.message}`)
-    }
-  }
-
   const handleSelectWorld = async (worldId, title) => {
     try {
       const data = await createSession({ world_id: worldId })
       setSessionId(data.session_id)
-      setScriptTitle(title)
+      setSessionTitle(title)
       setView('game')
       refreshSessions()
     } catch (err) {
@@ -50,20 +38,25 @@ export default function App() {
   const handleBackToSelect = () => {
     setView('select')
     setSessionId(null)
-    setScriptTitle('')
+    setSessionTitle('')
     refreshSessions()
   }
 
   const handleViewSession = (sid, title) => {
     setSessionId(sid)
-    setScriptTitle(title)
+    setSessionTitle(title)
     setView('game')
     setShowHistory(false)
   }
 
-  const handleRestartScript = (scriptId, title) => {
-    setShowHistory(false)
-    handleSelectScript(scriptId, title)
+  const handleCreateWorld = async (payload, startAfterCreate = false) => {
+    const res = await createWorld(payload)
+    const world = res.world
+    await listWorlds().then(setWorlds)
+    setShowCreateWorld(false)
+    if (startAfterCreate && world?.id) {
+      await handleSelectWorld(world.id, world.title || world.id)
+    }
   }
 
   if (view === 'game' && sessionId) {
@@ -71,7 +64,7 @@ export default function App() {
       <>
         <GamePage
           sessionId={sessionId}
-          scriptTitle={scriptTitle}
+          scriptTitle={sessionTitle}
           onBack={handleBackToSelect}
           onOpenHistory={() => { refreshSessions(); setShowHistory(true) }}
           onSessionEnded={refreshSessions}
@@ -82,7 +75,7 @@ export default function App() {
             activeSessionId={sessionId}
             onClose={() => setShowHistory(false)}
             onSelect={handleViewSession}
-            onNewGame={(sid) => { setShowHistory(false); handleSelectScript(sid, scripts.find(s => s.id === sid)?.title || sid) }}
+            onNewGame={(worldId, title) => { setShowHistory(false); handleSelectWorld(worldId, title) }}
             onRefresh={refreshSessions}
             onDeleteActive={handleBackToSelect}
           />
@@ -92,13 +85,19 @@ export default function App() {
   }
 
   return (
-    <ScriptSelect
-      scripts={scripts}
-      worlds={worlds}
-      sessions={sessions}
-      onSelectScript={handleSelectScript}
-      onSelectWorld={handleSelectWorld}
-      onContinue={handleViewSession}
-    />
+    <>
+      <ScriptSelect
+        worlds={worlds}
+        sessions={sessions}
+        onSelectWorld={handleSelectWorld}
+        onContinue={handleViewSession}
+        onOpenCreateWorld={() => setShowCreateWorld(true)}
+      />
+      <WorldCreateModal
+        open={showCreateWorld}
+        onClose={() => setShowCreateWorld(false)}
+        onCreate={handleCreateWorld}
+      />
+    </>
   )
 }

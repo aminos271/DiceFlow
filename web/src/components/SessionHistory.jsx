@@ -9,7 +9,7 @@ export default function SessionHistory({ sessions, activeSessionId, onClose, onS
 
   const handleStartRename = (s) => {
     setEditingId(s.session_id)
-    setEditName(s.display_name || s.script_id)
+    setEditName(s.display_name || s.world_id || '')
   }
 
   const handleSaveRename = async (sid) => {
@@ -56,7 +56,7 @@ export default function SessionHistory({ sessions, activeSessionId, onClose, onS
           sessions.map((s) => {
             const isActive = s.session_id === activeSessionId
             const isEditing = editingId === s.session_id
-            const display = s.display_name || s.script_id
+            const display = s.display_name || s.world_id || 'unknown'
 
             return (
               <div
@@ -77,12 +77,12 @@ export default function SessionHistory({ sessions, activeSessionId, onClose, onS
                     <button className="btn-sm btn-cancel" onClick={handleCancelRename}>取消</button>
                   </div>
                 ) : (
-                  <div className="hi-title" onClick={() => onSelect(s.session_id, s.script_id)}>
+                  <div className="hi-title" onClick={() => onSelect(s.session_id, display)}>
                     {display}
                   </div>
                 )}
-                <div className="hi-meta" onClick={() => !isEditing && onSelect(s.session_id, s.script_id)}>
-                  <span>{s.script_id}</span>
+                <div className="hi-meta" onClick={() => !isEditing && onSelect(s.session_id, display)}>
+                  <span>{s.world_id || ''}</span>
                   <span>回合 {s.turn_count}</span>
                   <span>{_formatDate(s.created_at)}</span>
                 </div>
@@ -96,7 +96,7 @@ export default function SessionHistory({ sessions, activeSessionId, onClose, onS
                   )}
                   <button
                     className="btn-new-game"
-                    onClick={(e) => { e.stopPropagation(); onNewGame(s.script_id) }}
+                    onClick={(e) => { e.stopPropagation(); onNewGame(s.world_id || '_default', display) }}
                   >
                     新游戏
                   </button>

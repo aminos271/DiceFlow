@@ -14,14 +14,98 @@ LOGGER = logging.getLogger(__name__)
 OPEN_ENDED_SOURCE = "open_ended_content"
 OPEN_ENDED_INTENT_KINDS = frozenset({"social", "discover", "improvised", "create_environment"})
 # Intent kinds that can produce entities without LLM via dynamic_entity_templates
-NO_LLM_SPAWN_INTENT_KINDS = frozenset({"discover", "create_environment"})
+NO_LLM_SPAWN_INTENT_KINDS = frozenset({"social", "discover", "create_environment"})
 OPEN_ENDED_ALLOWED_OPS = frozenset({"add_entity", "set_flag"})
 SOCIAL_HINT_KEYWORDS = frozenset({"招募", "同伴", "队友", "结伴", "推荐", "打听", "消息", "线索", "活计", "活儿"})
 DISCOVER_HINT_KEYWORDS = frozenset({"找", "寻找", "搜索", "搜查", "查看", "观察", "线索", "有没有", "可疑"})
 ENVIRONMENT_HINT_KEYWORDS = frozenset({"堆", "搬", "摆", "布置", "制造", "搭", "堵", "路障", "陷阱"})
 
-# Minimal fallback for no-LLM dynamic entity spawning when no script template exists.
-FALLBACK_DYNAMIC_SPAWN: dict[str, Any] = {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
+FALLBACK_DYNAMIC_SPAWNS: dict[str, list[dict[str, Any]]] = {
+    "social": [
+        {
+            "name": "沉默旅人",
+            "type": "npc",
+            "hp": 4,
+            "max_hp": 4,
+            "disposition": "friendly",
+            "favorability": 1,
+            "personality": {
+                "traits": ["谨慎", "寡言"],
+                "manner": "先观察你几眼，再低声回应",
+                "motivation": "想找个可靠的人同行，换取安全感",
+            },
+            "tags": ["npc", "dynamic", "friendly"],
+            "metadata": {
+                "allowed_actions": ["talk", "inspect"],
+                "actions": {
+                    "talk": {
+                        "dc": 9,
+                        "outcomes": {
+                            "success": {"events": ["旅人放下酒杯，表示愿意跟你谈谈同行的安排。"]},
+                            "fail": {"events": ["旅人仍有些戒备，只是含糊地点了点头。"]},
+                        },
+                    },
+                    "inspect": {
+                        "dc": 7,
+                        "outcomes": {
+                            "success": {"events": ["你注意到这名旅人的装备虽然旧，但收拾得很利落。"]},
+                            "fail": {"events": ["你只觉得对方像是经常赶路的人。"]},
+                        },
+                    },
+                },
+            },
+        },
+    ],
+    "discover": [
+        {
+            "name": "可疑纸条",
+            "type": "pickup",
+            "item_id": "可疑纸条",
+            "tags": ["item", "dynamic", "pickup", "clue"],
+            "metadata": {
+                "allowed_actions": ["inspect", "take"],
+                "actions": {
+                    "inspect": {
+                        "dc": 8,
+                        "outcomes": {
+                            "success": {"events": ["纸条上记着一段匆忙写下的地点与时间。"]},
+                            "fail": {"events": ["字迹被污渍糊住了，你一时辨认不清。"]},
+                        },
+                    },
+                    "take": {
+                        "dc": 6,
+                        "outcomes": {
+                            "success": {
+                                "move_item_to_inventory": ["$target"],
+                                "events": ["你把纸条收进背包，准备之后再仔细研究。"],
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "name": "松动砖缝",
+            "type": "clue",
+            "tags": ["clue", "dynamic"],
+            "metadata": {
+                "allowed_actions": ["inspect"],
+                "actions": {
+                    "inspect": {
+                        "dc": 8,
+                        "outcomes": {
+                            "success": {"events": ["你发现砖缝后藏着被人反复触碰过的痕迹。"]},
+                            "fail": {"events": ["你只看到一道不起眼的裂缝。"]},
+                        },
+                    },
+                },
+            },
+        },
+    ],
+    "create_environment": [
+        {"name": "临时障碍", "type": "obstacle", "tags": ["obstacle", "dynamic"]},
+    ],
+}
 
 
 def open_ended_content_phase(
@@ -52,7 +136,9 @@ def open_ended_content_phase(
         return {}
 
     # LLM path: requires world contract + LLM
+    llm_path_attempted = False
     if llm is not None and isinstance(state.script.get("world"), dict):
+        llm_path_attempted = True
         quality = _result_quality(result)
         try:
             raw_patch = _generate_open_ended_patch(llm, action, check, state, quality)
@@ -69,7 +155,12 @@ def open_ended_content_phase(
             return changes
 
     # No-LLM fallback: use script dynamic_entity_templates for discover/create_environment
-    if result in {"success", "critical_success"} and intent_kind in NO_LLM_SPAWN_INTENT_KINDS:
+    if (
+        llm is None
+        and not llm_path_attempted
+        and result in {"success", "critical_success"}
+        and intent_kind in NO_LLM_SPAWN_INTENT_KINDS
+    ):
         fallback_patch = _no_llm_dynamic_spawn_patch(intent_kind, state)
         if fallback_patch:
             return {"runtime_script_patch": fallback_patch}
@@ -219,9 +310,9 @@ def _no_llm_dynamic_spawn_patch(intent_kind: str, state: GameState) -> dict[str,
         if candidates:
             template = templates[candidates[state.turn_id % len(candidates)]]
         else:
-            template = FALLBACK_DYNAMIC_SPAWN
+            template = _fallback_dynamic_template(intent_kind, state.turn_id)
     else:
-        template = FALLBACK_DYNAMIC_SPAWN
+        template = _fallback_dynamic_template(intent_kind, state.turn_id)
 
     entity_id = f"dynamic_{intent_kind}_{state.turn_id}"
     entity = deepcopy(template)
@@ -237,3 +328,10 @@ def _no_llm_dynamic_spawn_patch(intent_kind: str, state: GameState) -> dict[str,
             {"op": "add_entity", "id": entity_id, "entity": entity},
         ],
     }
+
+
+def _fallback_dynamic_template(intent_kind: str, turn_id: int) -> dict[str, Any]:
+    candidates = FALLBACK_DYNAMIC_SPAWNS.get(intent_kind) or [
+        {"name": "临时发现", "type": "clue", "tags": ["dynamic"]}
+    ]
+    return candidates[turn_id % len(candidates)]

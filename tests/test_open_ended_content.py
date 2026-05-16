@@ -272,7 +272,31 @@ class OpenEndedContentTest(unittest.TestCase):
             "assessment": {"intent_kind": "social", "risk": "low", "difficulty": "medium", "plausibility": "reasonable"},
         }
         changes = open_ended_content_phase(MOCK_ACTION, check, {}, state, None)
-        self.assertEqual(changes, {})
+        self.assertIsNotNone(changes.get("runtime_script_patch"))
+        state.apply_changes(changes)
+        dyn_ids = [eid for eid in state.entities if eid.startswith("dynamic_")]
+        self.assertEqual(len(dyn_ids), 1)
+        self.assertEqual(state.entities[dyn_ids[0]]["type"], "npc")
+
+    def test_no_llm_social_triggers_generic_npc_fallback_without_templates(self) -> None:
+        """No LLM + social success should still generate a fallback NPC even when
+        the script has no dynamic_entity_templates."""
+        state = GameState(load_script("border_town_tavern"))
+        check = {
+            "dc": 13, "roll": 15, "result": "success", "dynamic": True,
+            "assessment": {"intent_kind": "social", "risk": "low", "difficulty": "medium", "plausibility": "reasonable"},
+        }
+
+        changes = open_ended_content_phase(MOCK_ACTION, check, {}, state, None)
+
+        self.assertIsNotNone(changes.get("runtime_script_patch"))
+        state.apply_changes(changes)
+        dyn_ids = [eid for eid, entity in state.entities.items() if "dynamic" in entity.get("tags", [])]
+        self.assertEqual(len(dyn_ids), 1)
+        spawned = state.entities[dyn_ids[0]]
+        self.assertEqual(spawned["type"], "npc")
+        self.assertIn("npc", spawned.get("tags", []))
+        self.assertIn("talk", spawned.get("metadata", {}).get("allowed_actions", []))
 
     # ── Validation: safety guardrails ───────────────────────────────────
 

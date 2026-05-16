@@ -240,8 +240,8 @@ def print_intro(state: GameState) -> None:
 
 def run_cli(script_name: str | None = None, world_id: str | None = None, use_llm: bool = True, debug: bool = True) -> None:
     if script_name:
-        game = Game(script=load_script(script_name), use_llm=use_llm)
-    elif world_id:
+        raise ValueError("script-driven CLI mode has been removed; use --world")
+    if world_id:
         from diceflow.core.bootstrap import bootstrap_from_defaults, bootstrap_from_lorebook
         from diceflow.core.lorebook import SessionLore
         lorebook = SessionLore()
@@ -249,9 +249,9 @@ def run_cli(script_name: str | None = None, world_id: str | None = None, use_llm
         bootstrap = bootstrap_from_lorebook(lorebook, world_id) or bootstrap_from_defaults(world_id)
         game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
     else:
-        # Default: use built-in bootstrap
+        # Default: bootstrap from the default world
         from diceflow.core.bootstrap import bootstrap_from_defaults
-        game = Game(script=bootstrap_from_defaults(), use_llm=use_llm)
+        game = Game(script=bootstrap_from_defaults("_default"), use_llm=use_llm)
     print_intro(game.state)
 
     while not game.state.flags.get("game_over"):

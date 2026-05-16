@@ -57,6 +57,22 @@ input:focus {
   border-color: var(--cyan);
 }
 
+textarea {
+  font-family: inherit;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-bright);
+  padding: 8px 12px;
+  outline: none;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: var(--cyan);
+}
+
 /* ── Script Select ────────────────────────────────────────────── */
 .script-select {
   max-width: 700px;
@@ -78,6 +94,12 @@ input:focus {
   color: var(--text-dim);
   margin-bottom: 32px;
   font-size: 13px;
+}
+
+.world-toolbar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
 }
 
 .script-grid {
@@ -211,6 +233,78 @@ input:focus {
 .continue-section + h1 {
   border-top: 1px solid var(--border);
   padding-top: 24px;
+}
+
+.world-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 16, 0.74);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1400;
+}
+
+.world-modal-card {
+  width: min(980px, 100%);
+  max-height: 90vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.world-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.world-modal-header h3 {
+  color: var(--cyan);
+  font-size: 18px;
+}
+
+.world-modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.world-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.world-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.world-field span {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.world-bootstrap-textarea {
+  min-height: 300px;
+}
+
+.world-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
 }
 
 /* ── Game Page ─────────────────────────────────────────────────── */

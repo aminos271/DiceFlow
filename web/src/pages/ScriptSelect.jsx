@@ -1,4 +1,4 @@
-export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript, onSelectWorld, onContinue }) {
+export default function ScriptSelect({ worlds, sessions, onSelectWorld, onContinue, onOpenCreateWorld }) {
   const sorted = [...(sessions || [])]
     .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
 
@@ -13,15 +13,15 @@ export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript
                 key={s.session_id}
                 className={`continue-card${s.ending ? ' ended' : ''}`}
                 onClick={() => {
-                  if (!s.ending) onContinue(s.session_id, s.display_name || s.script_id || s.world_id || '')
+                  if (!s.ending) onContinue(s.session_id, s.display_name || s.world_id || '')
                 }}
               >
                 <div className="continue-card-header">
-                  <span className="continue-name">{s.display_name || s.script_id || s.world_id || 'unknown'}</span>
+                  <span className="continue-name">{s.display_name || s.world_id || 'unknown'}</span>
                   {s.ending && <span className="continue-ending">{_endingLabel(s.ending)}</span>}
                 </div>
                 <div className="continue-meta">
-                  <span>{s.script_id || s.world_id || ''}</span>
+                  <span>{s.world_id || ''}</span>
                   <span>回合 {s.turn_count}</span>
                   <span>{_formatDate(s.updated_at)}</span>
                 </div>
@@ -31,9 +31,7 @@ export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript
                       className="btn-continue"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (s.script_id) {
-                          onSelectScript(s.script_id, s.script_id)
-                        } else if (s.world_id) {
+                        if (s.world_id) {
                           onSelectWorld(s.world_id, s.display_name || s.world_id)
                         }
                       }}
@@ -43,7 +41,7 @@ export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript
                   ) : (
                     <button
                       className="btn-continue"
-                      onClick={(e) => { e.stopPropagation(); onContinue(s.session_id, s.display_name || s.script_id || s.world_id || '') }}
+                      onClick={(e) => { e.stopPropagation(); onContinue(s.session_id, s.display_name || s.world_id || '') }}
                     >
                       继续游玩
                     </button>
@@ -56,6 +54,9 @@ export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript
       )}
 
       <h1>DiceFlow</h1>
+      <div className="world-toolbar">
+        <button className="btn-new-game" onClick={onOpenCreateWorld}>＋ 新建世界</button>
+      </div>
 
       {worlds.length > 0 && (
         <>
@@ -72,22 +73,8 @@ export default function ScriptSelect({ scripts, worlds, sessions, onSelectScript
         </>
       )}
 
-      {scripts.length > 0 && (
-        <>
-          <p className="subtitle" style={{ marginTop: worlds.length > 0 ? '2rem' : '0' }}>或者选择一个剧本</p>
-          <div className="script-grid">
-            {scripts.map((s) => (
-              <div key={s.id} className="script-card" onClick={() => onSelectScript(s.id, s.title)}>
-                <h3>{s.title}</h3>
-                <p>{s.intro}</p>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {!worlds.length && !scripts.length && (
-        <p className="subtitle">没有找到可用的世界或剧本。请检查配置。</p>
+      {!worlds.length && (
+        <p className="subtitle">没有找到可用的世界。请检查配置。</p>
       )}
     </div>
   )

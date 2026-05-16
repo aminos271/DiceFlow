@@ -60,7 +60,25 @@ function Stop-PortListener {
     }
 }
 
+function Stop-MatchingProcessTree {
+    param(
+        [string]$ProcessName,
+        [string]$CommandLinePattern
+    )
+
+    $matches = Get-CimInstance Win32_Process |
+        Where-Object { $_.Name -eq $ProcessName -and $_.CommandLine -match $CommandLinePattern }
+
+    foreach ($match in $matches) {
+        & taskkill /PID $match.ProcessId /T /F | Out-Null
+        Write-Host "Stopped matching $ProcessName (PID $($match.ProcessId))."
+    }
+}
+
 Stop-TrackedProcess -Name "backend" -PidFile (Join-Path $runRoot "backend.pid")
 Stop-TrackedProcess -Name "frontend" -PidFile (Join-Path $runRoot "frontend.pid")
+Stop-MatchingProcessTree -ProcessName "python.exe" -CommandLinePattern "uvicorn.+diceflow\.web\.server:app"
+Stop-MatchingProcessTree -ProcessName "node.exe" -CommandLinePattern "vite.+5173"
 Stop-PortListener -Port 8000
+Stop-PortListener -Port 8001
 Stop-PortListener -Port 5173

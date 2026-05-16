@@ -1,0 +1,361 @@
+player:
+  hp: 10
+  max_hp: 10
+  inventory:
+  - 短剑
+  - 火把
+  location: 古墓入口
+scene:
+  name: 古墓入口
+  description: 昏暗石室里潮气很重。一个守卫挡在左门前，门缝里透出微弱冷光。
+flags:
+  found_exit: false
+  door_open: false
+  game_over: false
+  ending: ''
+action_rules:
+- when:
+    intent_family: open
+    target_id: left_door
+    entities:
+      guard_1:
+        alive: true
+  valid: false
+  reason: 守卫仍挡在门前，你必须先处理守卫或摆脱他的压制。
+dc_modifiers:
+- when:
+    intent_family: open
+    target_id: left_door
+    target:
+      weakened: true
+  modifier: -3
+- when:
+    intent_family: attack
+    target_id: guard_1
+    target:
+      hostile: false
+  modifier: -2
+derivation_rules:
+- id: fallen_enemy_leaves_corpse
+  when:
+    result: [success, critical_success]
+    target_tags: [enemy]
+    target:
+      alive: false
+  spawn:
+    id_template: $target_id_corpse
+    entity:
+      name: $target_name的尸体
+      aliases: [尸体, $target_name尸体, $target_name的尸体]
+      type: corpse
+      tags: [corpse, searchable, derived]
+      metadata:
+        allowed_actions: [inspect, take]
+        actions:
+          inspect:
+            dc: 5
+            outcomes:
+              success:
+                events: [你检查了$target_name，确认他已经失去威胁。]
+          take:
+            dc: 8
+            outcomes:
+              critical_success:
+                entities:
+                  $target:
+                    looted: true
+                events: [你仔细搜过尸体，只找到破损的护具和无用杂物，没有钥匙。]
+              success:
+                entities:
+                  $target:
+                    looted: true
+                events: [你搜刮了尸体，没有找到钥匙或可用物品。]
+              fail:
+                events: [你匆忙翻找尸体，没有找到有价值的东西。]
+              critical_fail:
+                player:
+                  hp_delta: -1
+                events: [你翻动尸体时被破裂甲片划伤，没有找到钥匙。]
+world:
+  premise: 玩家被困在古墓中，必须找到出口逃出。
+  tone: 阴森、紧迫
+  allowed_scene_types: [corridor, chamber, hall, passage]
+  allowed_entity_types: [pickup, container, npc, obstacle]
+  forbidden: []
+  max_runtime_dc: 14
+  max_new_entities_per_transition: 3
+ending_texts:
+  victory: 守卫已经倒下，左门彻底敞开，你穿过冷光中的通道，逃出了古墓入口。
+  death: 你的伤势压过了意志，视线沉入黑暗，本次冒险到此结束。
+  timeout: 你拖得太久，古墓深处传来沉重机关声，退路被封死。
+dynamic_entity_templates:
+  discover:
+    type: container
+    name: 暗格
+    aliases: [暗格, 隐藏格]
+    tags: [container, dynamic]
+    contents: []
+  discover_clue:
+    type: clue
+    name: 墙上的划痕
+    aliases: [划痕, 刻痕]
+    tags: [clue, dynamic]
+    metadata:
+      allowed_actions: [inspect]
+      actions:
+        inspect:
+          dc: 9
+          outcomes:
+            success:
+              events: [石壁上的划痕排列有一定规律，可能是前人留下的暗号。]
+            fail:
+              events: [光线太暗，你看不清划痕的全貌。]
+  discover_item:
+    type: pickup
+    name: 古旧徽章
+    aliases: [徽章, 旧徽章]
+    tags: [item, dynamic, pickup]
+    item_id: 古旧徽章
+    value: 10
+    rarity: uncommon
+    metadata:
+      allowed_actions: [inspect, take]
+      actions:
+        inspect:
+          dc: 8
+          outcomes:
+            success:
+              events: [你认出这枚徽章属于古墓守卫军，上面刻着早已被遗忘的番号。]
+            fail:
+              events: [徽章锈迹斑斑，你看不清更多细节。]
+        take:
+          dc: 6
+          outcomes:
+            success:
+              move_item_to_inventory: [$target]
+              events: [你取下徽章收进背包，也许之后能派上用场。]
+  discover_npc:
+    type: npc
+    name: 受伤的探险者
+    aliases: [探险者, 伤者]
+    hp: 3
+    max_hp: 5
+    alive: true
+    favorability: 2
+    disposition: friendly
+    personality:
+      traits: [坚韧, 感恩]
+      manner: 虚弱但友善
+      motivation: 被守卫击伤后躲在此处，希望有人能帮他逃出去
+    tags: [npc, dynamic, friendly]
+    metadata:
+      allowed_actions: [inspect, talk]
+      actions:
+        inspect:
+          dc: 8
+          outcomes:
+            success:
+              events: [你发现这位探险者腿部受伤严重，但神志清醒。他身上没有任何武器或物品。]
+            fail:
+              events: [光线太暗，你看不清他的具体伤势。]
+        talk:
+          dc: 10
+          outcomes:
+            success:
+              events: ["他说自己是被守卫击伤的冒险者，并低声告诉你：'守卫换手时左肋会暴露，那是唯一的机会……'"]
+            fail:
+              events: [伤者痛苦地摇头，说不清更多情报。]
+  create_environment:
+    type: container
+    name: 障碍物
+    aliases: [障碍, 障碍物]
+    tags: [container, obstacle, dynamic]
+runtime_generation_hooks:
+- id: guard_defeated_scene_change
+  when:
+    intent_family: attack
+    result: [success, critical_success]
+    entities:
+      guard_1:
+        alive: false
+  prompt_hint: >-
+    守卫倒下后，石室的细节变得更加清晰。生成1-2个小型可交互内容：
+    墙壁上的痕迹、守卫留下的物品、或者空气中消散的气息。
+  allowed_entity_types: [pickup, container, npc]
+  max_dc: 12
+- id: door_opened_passage
+  when:
+    intent_family: open
+    target_id: left_door
+    result: [success, critical_success]
+  prompt_hint: >-
+    左门打开，冷光通道显现。生成1-2个通往前方的线索或物品：
+    通道壁上的铭文、地上的遗留物、或光的来源。
+  allowed_entity_types: [pickup, container]
+  max_dc: 10
+- id: door_inspected_first_time
+  when:
+    intent_family: inspect
+    target_id: left_door
+    result: [success, critical_success]
+  prompt_hint: >-
+    玩家仔细检查左门后，注意到石室角落中之前被忽略的细节。
+    生成1个小物品或可调查的痕迹。
+  allowed_entity_types: [pickup, container]
+  max_dc: 10
+entities:
+  guard_1:
+    name: 守卫
+    aliases: [守卫, 卫兵, 敌人, 看守]
+    type: npc
+    favorability: -3
+    disposition: hostile
+    personality:
+      traits: [警惕, 职责感强, 寡言]
+      manner: 低沉冷漠
+      motivation: 奉命看守古墓入口，任何闯入者都是敌人
+    metadata:
+      allowed_actions: [attack, talk, inspect]
+      actions:
+        attack:
+          dc: 12
+          outcomes:
+            critical_success:
+              entities:
+                $target:
+                  hp_delta: -5
+              events: [你抓住破绽重创守卫。]
+            success:
+              entities:
+                $target:
+                  hp_delta: -3
+              events: [你的攻击命中守卫。]
+            fail:
+              player:
+                hp_delta: -1
+              events: [守卫挡下攻击，但他的站位暴露了左门锁孔。]
+            critical_fail:
+              player:
+                hp_delta: -2
+              events: [攻击落空，守卫反击得手。]
+        talk:
+          dc: 13
+          outcomes:
+            critical_success:
+              entities:
+                $target:
+                  hostile: false
+              events: [守卫的敌意明显动摇，攻击他的难度降低了。]
+            success:
+              entities:
+                $target:
+                  hostile: false
+              events: [守卫的敌意短暂动摇，攻击他的难度降低了。]
+            fail:
+              player:
+                hp_delta: -1
+              events: [交涉失败，守卫用盾牌把你逼退。]
+            critical_fail:
+              player:
+                hp_delta: -2
+              events: [你的话激怒了守卫，他立刻逼近反击。]
+        inspect:
+          dc: 10
+          outcomes:
+            critical_success:
+              events: [你看穿守卫换手时的破绽，下一次进攻会更容易。]
+            success:
+              events: [你观察到守卫每次换手都会露出短暂破绽。]
+            fail:
+              events: [你没看出更多信息，但守卫仍被牵制在左门前。]
+            critical_fail:
+              player:
+                hp_delta: -1
+              events: [你检查时分神，守卫逼近并让你撞上石壁。]
+    hp: 6
+    max_hp: 6
+    alive: true
+    location: 入口
+    hostile: true
+    tags: [enemy, human, hostile]
+  left_door:
+    name: 左门
+    aliases: [门, 左门, 石门]
+    type: door
+    locked: true
+    tags: [door, openable, locked]
+    metadata:
+      allowed_actions: [open, inspect]
+      actions:
+        open:
+          dc: 12
+          outcomes:
+            critical_success:
+              entities:
+                $target:
+                  opened: true
+                  locked: false
+              flags:
+                door_open: true
+              set_entity_states:
+                inner_passage:
+                  visible: true
+                  available: true
+              events: [你猛地推开左门，冷光一下子倾泻出来。]
+            success:
+              entities:
+                $target:
+                  opened: true
+                  locked: false
+              flags:
+                door_open: true
+              set_entity_states:
+                inner_passage:
+                  visible: true
+                  available: true
+              events: [你打开左门，门后的通道露了出来。]
+            fail:
+              events: [门锁与门轴发出刺耳摩擦声，但左门还没完全打开。]
+            critical_fail:
+              player:
+                hp_delta: -1
+              events: [你用力过猛，反震让手臂发麻。]
+        inspect:
+          dc: 8
+          outcomes:
+            success:
+              events: [左门缝隙里透着冷光，门轴看起来有些年久失修。]
+            fail:
+              events: [你只看出这是一扇沉重的旧石门。]
+  inner_passage:
+    name: 深处通道
+    aliases: [通道, 深处, 里面]
+    type: obstacle
+    visible: false
+    available: false
+    tags: [route, exit]
+    metadata:
+      allowed_actions: [move, inspect]
+      actions:
+        move:
+          dc: 8
+          outcomes:
+            critical_success:
+              flags:
+                found_exit: true
+              events: [你迅速穿过深处通道，看到前方出现了更广阔的空间。]
+            success:
+              flags:
+                found_exit: true
+              events: [你进入深处通道，前路终于被打开。]
+            fail:
+              events: [你刚踏进通道，就被碎石迫得停了下来。]
+            critical_fail:
+              player:
+                hp_delta: -1
+              events: [通道碎石绊住了你，你狼狈地撞上石壁。]
+        inspect:
+          dc: 7
+          outcomes:
+            success:
+              events: [通道内有一股冷风，像是更深处的出口在呼吸。]

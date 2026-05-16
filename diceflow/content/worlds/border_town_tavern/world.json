@@ -1,0 +1,7 @@
+{
+  "id": "border_town_tavern",
+  "title": "边境小镇酒馆",
+  "description": "一间充满旅人与流言的边境酒馆。你需要在这里找到同伴、线索，或者一份足够危险的委托。",
+  "script_ids": [],
+  "default_tags": ["酒馆", "社交", "招募", "边境"]
+}
