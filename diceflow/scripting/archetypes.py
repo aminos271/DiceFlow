@@ -60,17 +60,53 @@ ENTITY_ARCHETYPES: dict[str, dict[str, Any]] = {
                         "critical_success": {
                             "entities": {"$target": {"favorability_delta": 2, "hostile": False}},
                             "events": "$hook.talk_success_events",
+                            "add_npc_memory": {
+                                "mem_talk_$target": {
+                                    "npc_entity_id": "$target",
+                                    "summary": "与$target_name相谈甚欢，关系明显改善。",
+                                    "sentiment": "positive",
+                                    "tags": ["talk"],
+                                    "importance": 2,
+                                }
+                            },
                         },
                         "success": {
                             "entities": {"$target": {"favorability_delta": 1}},
                             "events": "$hook.talk_success_events",
+                            "add_npc_memory": {
+                                "mem_talk_$target": {
+                                    "npc_entity_id": "$target",
+                                    "summary": "与$target_name的交谈进展顺利。",
+                                    "sentiment": "positive",
+                                    "tags": ["talk"],
+                                    "importance": 1,
+                                }
+                            },
                         },
                         "fail": {
                             "events": "$hook.talk_fail_events",
+                            "add_npc_memory": {
+                                "mem_talk_$target": {
+                                    "npc_entity_id": "$target",
+                                    "summary": "与$target_name的交谈没有取得进展。",
+                                    "sentiment": "neutral",
+                                    "tags": ["talk"],
+                                    "importance": 1,
+                                }
+                            },
                         },
                         "critical_fail": {
                             "entities": {"$target": {"favorability_delta": -2, "hostile": True}},
                             "events": "$hook.talk_fail_events",
+                            "add_npc_memory": {
+                                "mem_talk_$target": {
+                                    "npc_entity_id": "$target",
+                                    "summary": "与$target_name的交谈激怒了对方，关系恶化。",
+                                    "sentiment": "negative",
+                                    "tags": ["talk", "conflict"],
+                                    "importance": 2,
+                                }
+                            },
                         },
                     },
                 },

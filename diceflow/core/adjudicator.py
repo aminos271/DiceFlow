@@ -211,11 +211,22 @@ class DynamicAdjudicator:
             }
 
         hp_loss = 2 if result == "critical_fail" or risk == "high" else 1
-        return {
+        fail_memory_kwargs: dict[str, Any] = {
             "player": {"hp_delta": -hp_loss},
             "entities": entity_changes,
             "events": [f"{method}没有奏效，{target_name}识破了你的意图并逼近反制。"],
         }
+        if _is_npc_target(target):
+            fail_memory_kwargs["add_npc_memory"] = {
+                f"mem_fail_{state.turn_id}": {
+                    "npc_entity_id": target_id,
+                    "summary": f"{method}没有奏效，{target_name}识破了你的意图。",
+                    "sentiment": "negative",
+                    "tags": [intent_kind, "failure"],
+                    "importance": 1 if result == "fail" else 2,
+                }
+            }
+        return fail_memory_kwargs
 
 
 def _looks_open_ended(action: Action) -> bool:
@@ -233,6 +244,10 @@ def _looks_open_ended(action: Action) -> bool:
         if part
     )
     return any(kw in text for kw in OPEN_ENDED_SOCIAL_KEYWORDS)
+
+
+def _is_npc_target(target: dict[str, Any]) -> bool:
+    return target.get("type") == "npc" or "npc" in target.get("tags", [])
 
 
 def _sanitize_assessment(raw: object, action: Action | None = None) -> dict[str, Any]:

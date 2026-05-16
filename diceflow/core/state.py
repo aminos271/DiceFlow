@@ -14,7 +14,7 @@ from diceflow.core.lifecycle import (
     prepare_spawned_entity,
 )
 from diceflow.core.matching import match_entity_name
-from diceflow.core.models import Location, Thread
+from diceflow.core.models import Location, NpcMemory, Thread
 from diceflow.core.runtime_patch import RuntimeScriptPatch, apply_runtime_script_patch, normalize_runtime_script_patch
 from diceflow.core.utils import dedupe_preserving_order
 from diceflow.scripting.archetypes import ENTITY_RUNTIME_DEFAULTS, Script, materialize_entity
@@ -43,6 +43,7 @@ class GameState:
             loc_id: Location.from_dict(loc_data) if isinstance(loc_data, dict) else Location(id=loc_id, name=loc_id)
             for loc_id, loc_data in self.script.get("locations", {}).items()
         }
+        self.npc_memories: dict[str, NpcMemory] = {}
 
     def apply_script_patch(self, patch: RuntimeScriptPatch | None) -> None:
         if not patch:
@@ -88,6 +89,7 @@ class GameState:
             "script_patches": deepcopy(self.script_patches[-10:]),
             "threads": {tid: t.to_dict() for tid, t in self.threads.items()},
             "locations": {lid: l.to_dict() for lid, l in self.locations.items()},
+            "npc_memories": {mid: m.to_dict() for mid, m in self.npc_memories.items()},
         }
 
     def get_visible_entities(self) -> dict[str, dict[str, Any]]:
@@ -132,6 +134,14 @@ class GameState:
                 "location_id": target_id,
                 "location_name": target_loc.name if target_loc else target_id,
             })
+        return result
+
+    def get_memories_for_npc(self, npc_entity_id: str) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for mem in self.npc_memories.values():
+            if mem.npc_entity_id == npc_entity_id and mem.discovered:
+                result.append(mem.to_dict())
+        result.sort(key=lambda m: m["source_turn_id"], reverse=True)
         return result
 
     def get_available_action_hints(self) -> list[str]:
@@ -333,6 +343,46 @@ class GameState:
                     new_items = [str(i) for i in value] if isinstance(value, list) else []
                     setattr(loc, list_key, list(dict.fromkeys(existing + new_items)))
             loc.last_visited_turn_id = self.turn_id
+
+        for mem_id, mem_data in changes.get("add_npc_memory", {}).items():
+            if not isinstance(mem_data, dict):
+                continue
+            actual_id = str(mem_id)
+            if actual_id in self.npc_memories:
+                actual_id = f"{mem_id}_{self.turn_id}"
+            if actual_id in self.npc_memories:
+                continue
+            mem_data.setdefault("id", actual_id)
+            mem_data.setdefault("source_turn_id", self.turn_id)
+            mem = NpcMemory.from_dict(mem_data)
+            if not mem.npc_entity_id or not mem.summary:
+                continue
+            mem.id = actual_id
+            self.npc_memories[actual_id] = mem
+
+        for mem_id, mem_data in changes.get("update_npc_memory", {}).items():
+            if not isinstance(mem_data, dict) or mem_id not in self.npc_memories:
+                continue
+            mem = self.npc_memories[mem_id]
+            if "summary" in mem_data:
+                mem.summary = str(mem_data["summary"])
+            if "sentiment" in mem_data:
+                value = str(mem_data["sentiment"])
+                if value in NpcMemory.VALID_SENTIMENTS:
+                    mem.sentiment = value
+            if "importance" in mem_data:
+                try:
+                    importance = int(mem_data["importance"])
+                except (TypeError, ValueError):
+                    importance = mem.importance
+                mem.importance = max(0, min(5, importance))
+            if "discovered" in mem_data:
+                mem.discovered = bool(mem_data["discovered"])
+            for list_key in ("tags",):
+                if list_key in mem_data:
+                    value = mem_data[list_key]
+                    new_items = [str(i) for i in value] if isinstance(value, list) else []
+                    setattr(mem, list_key, list(dict.fromkeys(mem.tags + new_items)))
 
         for event in changes.get("events", []):
             self.recent_events.append(str(event))

@@ -135,7 +135,7 @@ def _success_changes(
         flags["dynamic_distraction_created"] = True
         events = [f"对方的态度明显松动。"]
         thread_title = f"与{target_name}建立联系" if target_name else "与对方交涉"
-        return {
+        changes: dict[str, Any] = {
             "entities": entities,
             "flags": flags,
             "events": events,
@@ -150,6 +150,17 @@ def _success_changes(
                 }
             },
         }
+        if target_id and _is_npc_entity(state.entities.get(target_id, {})):
+            changes["add_npc_memory"] = {
+                f"mem_social_{state.turn_id}": {
+                    "npc_entity_id": target_id,
+                    "summary": f"通过{method}与{target_name}建立了联系。",
+                    "sentiment": "positive",
+                    "tags": [intent_kind],
+                    "importance": 1,
+                }
+            }
+        return changes
     elif intent_kind == "stealth":
         if target_id and target_id in entities:
             entities[target_id]["line_of_sight_blocked"] = True
@@ -201,3 +212,7 @@ def _success_changes(
     if strong_success:
         flags["dynamic_distraction_created"] = True
     return {"entities": entities, "flags": flags, "events": events}
+
+
+def _is_npc_entity(entity: dict[str, Any]) -> bool:
+    return entity.get("type") == "npc" or "npc" in entity.get("tags", [])

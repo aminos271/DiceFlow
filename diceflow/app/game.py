@@ -425,6 +425,9 @@ def _visible_npcs_for_narration(state: GameState) -> dict[str, dict[str, Any]]:
                         "traits": personality.get("traits", []),
                         "manner": personality.get("manner", ""),
                     }
+                memories = state.get_memories_for_npc(eid)
+                if memories:
+                    npc_data["recent_memories"] = memories[:5]
                 npcs[eid] = npc_data
     return npcs
 

@@ -145,6 +145,48 @@ class Location:
         )
 
 
+@dataclass
+class NpcMemory:
+    id: str
+    npc_entity_id: str
+    summary: str = ""
+    sentiment: str = "neutral"
+    source_turn_id: int = 0
+    tags: list[str] = field(default_factory=list)
+    importance: int = 1
+    discovered: bool = True
+
+    VALID_SENTIMENTS = frozenset({"positive", "negative", "neutral", "mixed"})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "npc_entity_id": self.npc_entity_id,
+            "summary": self.summary,
+            "sentiment": self.sentiment,
+            "source_turn_id": self.source_turn_id,
+            "tags": list(self.tags),
+            "importance": self.importance,
+            "discovered": self.discovered,
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> "NpcMemory":
+        sentiment = str(data.get("sentiment", "neutral"))
+        if sentiment not in NpcMemory.VALID_SENTIMENTS:
+            sentiment = "neutral"
+        return NpcMemory(
+            id=str(data.get("id", "")),
+            npc_entity_id=str(data.get("npc_entity_id", "")),
+            summary=str(data.get("summary", "")),
+            sentiment=sentiment,
+            source_turn_id=_clamp_int(data.get("source_turn_id", 0), 0, 999999),
+            tags=_string_list(data.get("tags", [])),
+            importance=_clamp_int(data.get("importance", 1), 0, 5),
+            discovered=bool(data.get("discovered", True)),
+        )
+
+
 def _string_to_string_dict(value: Any) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}

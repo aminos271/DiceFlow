@@ -247,6 +247,20 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
               <DetailRow label="动机" value={entity.personality.motivation || '-'} />
             </>
           )}
+          {entity.recent_memories && entity.recent_memories.length > 0 && (
+            <>
+              <div className="npc-memories-title">最近记忆</div>
+              {entity.recent_memories.map((mem) => (
+                <div key={mem.id} className={`memory-item memory-${mem.sentiment}`}>
+                  <span className="memory-sentiment">
+                    {mem.sentiment === 'positive' ? '↑' : mem.sentiment === 'negative' ? '↓' : '·'}
+                  </span>
+                  <span className="memory-summary">{mem.summary}</span>
+                  <span className="memory-turn">T{mem.source_turn_id}</span>
+                </div>
+              ))}
+            </>
+          )}
           {entity.last_seen_turn_id !== undefined && (
             <DetailRow label="最后出现在回合" value={String(entity.last_seen_turn_id)} />
           )}

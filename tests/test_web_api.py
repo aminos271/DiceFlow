@@ -172,6 +172,37 @@ class TestGetSession:
         assert isinstance(body["status"]["exits"], list)
         assert body["status"]["exits"] == []  # empty for new session
 
+    def test_entity_detail_includes_npc_memories(self, isolated_store):
+        data = _create_session(isolated_store)
+        sid = data["session_id"]
+        session = isolated_store.get(sid)
+        # Find the innkeeper entity ID by looking at state entities
+        innkeeper_id = None
+        for eid, ent in session.game.state.entities.items():
+            if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
+                innkeeper_id = eid
+                break
+        assert innkeeper_id is not None, "no NPC found in default world"
+        from diceflow.core.models import NpcMemory
+        session.game.state.npc_memories["mem_1"] = NpcMemory(
+            id="mem_1",
+            npc_entity_id=innkeeper_id,
+            summary="与老板相谈甚欢。",
+            sentiment="positive",
+            source_turn_id=2,
+            tags=["talk"],
+            importance=2,
+        )
+
+        resp = client.get(f"/api/sessions/{sid}")
+        assert resp.status_code == 200
+        known = resp.json()["status"]["known_entities"]
+        innkeeper = next((e for e in known if e["id"] == innkeeper_id), None)
+        assert innkeeper is not None
+        assert "recent_memories" in innkeeper
+        assert len(innkeeper["recent_memories"]) == 1
+        assert innkeeper["recent_memories"][0]["summary"] == "与老板相谈甚欢。"
+
     def test_session_status_includes_exit_hint_group(self, isolated_store):
         data = _create_session(isolated_store)
         sid = data["session_id"]

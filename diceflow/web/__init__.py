@@ -10,7 +10,7 @@ from typing import Any
 from diceflow.app.game import Game
 from diceflow.core.bootstrap import WorldBootstrap, bootstrap_from_defaults, bootstrap_from_lorebook
 from diceflow.core.lorebook import SessionLore
-from diceflow.core.models import Location, Thread
+from diceflow.core.models import Location, NpcMemory, Thread
 from diceflow.scripting.loader import load_script
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sessions"
@@ -290,6 +290,12 @@ def _restore_snapshot_legacy(game: Game, snapshot: dict[str, Any]) -> None:
             lid: Location.from_dict(ld) if isinstance(ld, dict) else Location(id=lid, name=lid)
             for lid, ld in locations.items()
         }
+    if "npc_memories" in snapshot:
+        npc_memories = snapshot["npc_memories"] if isinstance(snapshot["npc_memories"], dict) else {}
+        state.npc_memories = {
+            mid: NpcMemory.from_dict(md) if isinstance(md, dict) else NpcMemory(id=mid, npc_entity_id="", summary="")
+            for mid, md in npc_memories.items()
+        }
 
 
 def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
@@ -325,4 +331,10 @@ def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
         state.locations = {
             lid: Location.from_dict(ld) if isinstance(ld, dict) else Location(id=lid, name=lid)
             for lid, ld in locations.items()
+        }
+    if "npc_memories" in snapshot:
+        npc_memories = snapshot["npc_memories"] if isinstance(snapshot["npc_memories"], dict) else {}
+        state.npc_memories = {
+            mid: NpcMemory.from_dict(md) if isinstance(md, dict) else NpcMemory(id=mid, npc_entity_id="", summary="")
+            for mid, md in npc_memories.items()
         }

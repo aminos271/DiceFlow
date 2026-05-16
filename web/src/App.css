@@ -874,6 +874,48 @@ textarea:focus {
   line-height: 1.4;
 }
 
+/* ── NPC Memories (in entity detail) ──────────────────────────── */
+.npc-memories-title {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(42, 42, 74, 0.5);
+}
+
+.memory-sentiment {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
+.memory-positive .memory-sentiment { color: var(--green); }
+.memory-negative .memory-sentiment { color: var(--red); }
+.memory-neutral .memory-sentiment { color: var(--text-dim); }
+.memory-mixed .memory-sentiment { color: var(--yellow); }
+
+.memory-summary {
+  flex: 1;
+  color: var(--text);
+}
+
+.memory-turn {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
 /* ── Entity Detail Panel ───────────────────────────────────────── */
 .entity-detail-panel {
   background: var(--surface2);

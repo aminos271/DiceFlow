@@ -153,6 +153,18 @@ class GameLoopTest(unittest.TestCase):
         self.assertIn("\u76fe\u724c", game.state.player["inventory"])
         self.assertTrue(game.state.entities["guard_1_shield"]["looted"])
 
+    def test_talk_to_npc_creates_memory(self) -> None:
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        game.rules = RuleEngine(random.Random(0))
+
+        record = game.run_turn("\u8bf4\u670d\u9152\u9986\u8001\u677f")
+
+        self.assertEqual(record.check["result"], "success")
+        self.assertTrue(len(game.state.npc_memories) > 0)
+        mem = next(iter(game.state.npc_memories.values()))
+        self.assertEqual(mem.npc_entity_id, "barkeeper")
+        self.assertEqual(mem.sentiment, "positive")
+
 
 if __name__ == "__main__":
     unittest.main()

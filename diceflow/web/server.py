@@ -737,6 +737,9 @@ def _entity_record(session, entity_id: str, ent: dict[str, Any], journal_entry: 
             }
         elif isinstance(personality, str):
             record["personality"] = {"traits": [], "manner": personality, "motivation": ""}
+        memories = state.get_memories_for_npc(entity_id)
+        if memories:
+            record["recent_memories"] = memories[:5]
     return record
 
 

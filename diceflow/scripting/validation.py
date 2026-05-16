@@ -24,6 +24,8 @@ VALID_CHANGE_KEYS = {
     "update_thread",
     "add_location",
     "update_location",
+    "add_npc_memory",
+    "update_npc_memory",
 }
 VALID_ENDING_KEYS = {"player_hp_lte", "turn_id_gte", "flags", "entities"}
 VALID_WHEN_KEYS = {"intent_family", "target_id", "target_type", "target", "flags", "entities", "target_tags", "any_target_tags", "tool_tags", "any_tool_tags"}
@@ -351,6 +353,10 @@ def _validate_changes(path: str, changes: dict[str, Any], errors: list[str], has
         errors.append(f"{path}.add_location must be a dict")
     if "update_location" in changes and not isinstance(changes["update_location"], dict):
         errors.append(f"{path}.update_location must be a dict")
+    if "add_npc_memory" in changes and not isinstance(changes["add_npc_memory"], dict):
+        errors.append(f"{path}.add_npc_memory must be a dict")
+    if "update_npc_memory" in changes and not isinstance(changes["update_npc_memory"], dict):
+        errors.append(f"{path}.update_npc_memory must be a dict")
 
 
 def _validate_thread_changes(path: str, thread_changes: dict[str, Any], errors: list[str], *, is_add: bool) -> None:
