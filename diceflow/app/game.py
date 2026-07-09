@@ -35,6 +35,7 @@ from diceflow.llm.client import LLMClient, narrate, parse_intent
 from diceflow.core.bootstrap import WorldBootstrap
 from diceflow.scripting.loader import Script, load_script
 from diceflow.world_model import PhaseContext, PhaseRegistry
+from diceflow.world_model.favorability import FavorabilityPhase
 from diceflow.world_model.phases import OpenEndedPhase, ReactionPhase
 from diceflow.world_model.time import TimePhase
 
@@ -53,6 +54,7 @@ class Game:
         self.phases.register(ReactionPhase())
         self.phases.register(OpenEndedPhase())
         self.phases.register(TimePhase())
+        self.phases.register(FavorabilityPhase())
 
     def run_turn(self, player_input: str, forced_roll: int | None = None) -> TurnRecord:
         turn_id = self.state.advance_turn()

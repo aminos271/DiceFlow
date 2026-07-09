@@ -161,5 +161,29 @@ class FavorabilityPhaseLLMTest(unittest.TestCase):
         self.assertNotIn("entities", out)
 
 
+from diceflow.app.game import Game
+
+
+class FavorabilityIntegrationTest(unittest.TestCase):
+    def test_attack_records_relationship_history(self) -> None:
+        # tomb_entrance's guard is attacked via standard resolution (hp_delta),
+        # so the favorability heuristic records a relationship event.
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        game.run_turn("攻击守卫", forced_roll=15)
+        npcs = [e for e in game.state.entities.values()
+                if e.get("type") == "npc" or "npc" in e.get("tags", [])]
+        self.assertTrue(any(e.get("relationship", {}).get("history") for e in npcs))
+
+    def test_talk_records_history_without_double_delta(self) -> None:
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        fav_before = game.state.entities["barkeeper"].get("favorability", 0)
+        game.run_turn("和老板说话", forced_roll=15)
+        rel = game.state.entities["barkeeper"].get("relationship", {})
+        self.assertTrue(rel.get("history"))
+        # favorability changed by outcome only (no double application)
+        fav_after = game.state.entities["barkeeper"].get("favorability", 0)
+        self.assertNotEqual(fav_before, fav_after)
+
+
 if __name__ == "__main__":
     unittest.main()
