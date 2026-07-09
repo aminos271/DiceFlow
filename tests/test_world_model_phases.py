@@ -8,7 +8,8 @@ from diceflow.core.state import GameState
 from diceflow.core.updater import update_state
 from diceflow.core.validator import validate
 from diceflow.scripting.loader import load_script
-from diceflow.world_model.base import PhaseContext
+from diceflow.app.game import Game
+from diceflow.world_model.base import Phase, PhaseContext
 from diceflow.world_model.phases import OpenEndedPhase, ReactionPhase
 
 
@@ -114,6 +115,47 @@ class OpenEndedPhaseTest(unittest.TestCase):
         ctx.llm = llm
         self.assertEqual(phase.run(ctx), {})
         self.assertEqual(llm.call_count, 0)
+
+
+class _SpyPhase:
+    """Records whether it ran during a turn, regardless of branch."""
+    name = "spy"
+    order = 15  # between reaction(10) and open_ended(20)
+
+    def __init__(self) -> None:
+        self.ran_kinds: list[str] = []
+
+    def run(self, ctx: PhaseContext) -> dict:
+        self.ran_kinds.append(ctx.resolution_kind)
+        return {}
+
+
+class RunTurnRegistryTest(unittest.TestCase):
+    def _game(self, script: str = "border_town_tavern") -> Game:
+        return Game(script=load_script(script), use_llm=False)
+
+    def test_standard_turn_runs_registered_phases(self) -> None:
+        game = self._game()
+        spy = _SpyPhase()
+        game.phases.register(spy)
+        game.run_turn("和老板攀谈")
+        self.assertTrue(len(spy.ran_kinds) >= 1)
+
+    def test_invalid_turn_still_invokes_registry(self) -> None:
+        game = self._game()
+        spy = _SpyPhase()
+        game.phases.register(spy)
+        game.run_turn("xyzqwerty 不存在的动作")
+        # registry still ran the spy (uniform invocation across branches)
+        self.assertTrue(len(spy.ran_kinds) >= 1)
+        self.assertFalse(game.state.flags.get("game_over"))
+
+    def test_existing_reaction_still_fires_in_combat(self) -> None:
+        """Regression: a hostile target still counter-attacks after a hit."""
+        game = self._game("tomb_entrance")
+        hp_before = game.state.player["hp"]
+        game.run_turn("攻击守卫", forced_roll=15)  # force non-crit success
+        self.assertLess(game.state.player["hp"], hp_before)
 
 
 if __name__ == "__main__":

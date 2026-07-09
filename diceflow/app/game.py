@@ -25,8 +25,7 @@ from diceflow.core.adjudicator import DynamicAdjudicator
 from diceflow.core.dynamic_world import dynamic_world_phase
 from diceflow.core.models import TurnRecord, TurnResolution
 from diceflow.core.npc_autonomy import NPC_AUTONOMY_ENABLED, npc_autonomy_phase, record_autonomy_turn
-from diceflow.core.open_ended_content import open_ended_content_phase
-from diceflow.core.reaction import merge_state_changes, reaction_phase
+from diceflow.core.reaction import merge_state_changes
 from diceflow.core.rules import RuleEngine
 from diceflow.core.state import GameState
 from diceflow.core.updater import update_state
@@ -34,6 +33,8 @@ from diceflow.core.validator import validate
 from diceflow.llm.client import LLMClient, narrate, parse_intent
 from diceflow.core.bootstrap import WorldBootstrap
 from diceflow.scripting.loader import Script, load_script
+from diceflow.world_model import PhaseContext, PhaseRegistry
+from diceflow.world_model.phases import OpenEndedPhase, ReactionPhase
 
 
 class Game:
@@ -46,6 +47,9 @@ class Game:
         self.adjudicator = DynamicAdjudicator()
         self.llm = self._build_llm() if use_llm else None
         self.lorebook = lorebook  # SessionLore | None, set by web layer
+        self.phases = PhaseRegistry()
+        self.phases.register(ReactionPhase())
+        self.phases.register(OpenEndedPhase())
 
     def run_turn(self, player_input: str, forced_roll: int | None = None) -> TurnRecord:
         turn_id = self.state.advance_turn()
@@ -72,20 +76,24 @@ class Game:
                 "assessment": {"intent_kind": "transition"},
             }
             self.state.apply_changes(world_changes)
+            turn_changes = self._run_post_resolution(
+                turn_id, player_input, action, validation, check, world_changes,
+                "transition_attempt",
+            )
             turn_resolution = build_turn_resolution(
                 turn_id=turn_id,
                 player_input=player_input,
                 action=action,
                 validation={"valid": True, "reason": "dynamic_world", "fallback_reason": validation.get("reason", "")},
                 check=check,
-                state_changes=world_changes,
+                state_changes=turn_changes,
                 resolution_kind="transition_attempt",
                 reason_tags=["world_transition_attempt"],
                 state=self.state,
                 lorebook=self.lorebook,
             )
             narration_text = narrate(turn_resolution, self.state, self.llm)
-            summary = _make_summary(action, check, world_changes)
+            summary = _make_summary(action, check, turn_changes)
             record = TurnRecord(
                 turn_id=turn_id,
                 player_input=player_input,
@@ -96,7 +104,7 @@ class Game:
                     "fallback_reason": validation.get("reason", ""),
                 },
                 check=check,
-                state_changes=world_changes,
+                state_changes=turn_changes,
                 narration=narration_text,
                 summary=summary,
             )
@@ -110,13 +118,10 @@ class Game:
             check = self.adjudicator.resolve(assessment, forced_roll=forced_roll)
             changes = self.adjudicator.update_state(action, check, self.state)
             self.state.apply_changes(changes)
-            reaction_changes = reaction_phase(action, check, changes, self.state)
-            self.state.apply_changes(reaction_changes)
-            turn_changes = merge_state_changes(changes, reaction_changes)
-            open_ended_changes = open_ended_content_phase(action, check, turn_changes, self.state, self.llm)
-            self.state.apply_changes(open_ended_changes)
-            _sync_lorebook_for_patch(self.lorebook, open_ended_changes, turn_id)
-            turn_changes = merge_state_changes(turn_changes, open_ended_changes)
+            turn_changes = self._run_post_resolution(
+                turn_id, player_input, action, validation, check, changes,
+                "dynamic_adjudication",
+            )
             reason_tags = list(assessment.get("reason_tags", []))
             turn_resolution = build_turn_resolution(
                 turn_id=turn_id,
@@ -159,13 +164,17 @@ class Game:
                 ],
             }
             self.state.apply_changes(changes)
+            turn_changes = self._run_post_resolution(
+                turn_id, player_input, action, validation, None, changes,
+                "invalid",
+            )
             turn_resolution = build_turn_resolution(
                 turn_id=turn_id,
                 player_input=player_input,
                 action=action,
                 validation=validation,
                 check=None,
-                state_changes=changes,
+                state_changes=turn_changes,
                 resolution_kind="invalid",
                 reason_tags=[],
                 state=self.state,
@@ -178,7 +187,7 @@ class Game:
                 action=action,
                 validation=validation,
                 check=None,
-                state_changes=changes,
+                state_changes=turn_changes,
                 narration=narration_text,
                 summary=f"无效行动：{validation['reason']}",
             )
@@ -190,13 +199,10 @@ class Game:
         check = self.rules.resolve(action, self.state, forced_roll=forced_roll)
         changes = update_state(action, check, self.state)
         self.state.apply_changes(changes)
-        reaction_changes = reaction_phase(action, check, changes, self.state)
-        self.state.apply_changes(reaction_changes)
-        turn_changes = merge_state_changes(changes, reaction_changes)
-        open_ended_changes = open_ended_content_phase(action, check, turn_changes, self.state, self.llm)
-        self.state.apply_changes(open_ended_changes)
-        _sync_lorebook_for_patch(self.lorebook, open_ended_changes, turn_id)
-        turn_changes = merge_state_changes(turn_changes, open_ended_changes)
+        turn_changes = self._run_post_resolution(
+            turn_id, player_input, action, validation, check, changes,
+            "standard",
+        )
         turn_resolution = build_turn_resolution(
             turn_id=turn_id,
             player_input=player_input,
@@ -225,6 +231,38 @@ class Game:
         _attach_turn_presentation(record, before_context, self.state)
         self.state.record_turn(record.to_dict())
         return record
+
+    def _run_post_resolution(
+        self,
+        turn_id: int,
+        player_input: str,
+        action: dict[str, Any],
+        validation: dict[str, Any],
+        check: dict[str, Any] | None,
+        turn_changes: dict[str, Any],
+        resolution_kind: str,
+    ) -> dict[str, Any]:
+        """Run the registered post-resolution phase chain uniformly.
+
+        Replaces the per-branch reaction→open_ended calls. Each phase self-
+        decides whether to apply based on resolution_kind, preserving the
+        pre-refactor skip semantics for invalid/transition branches.
+        """
+        del player_input  # reserved for future phases; not used by default phases
+        ctx = PhaseContext(
+            action=action,
+            validation=validation,
+            check=check,
+            turn_changes=dict(turn_changes),
+            state=self.state,
+            llm=self.llm,
+            lorebook=self.lorebook,
+            resolution_kind=resolution_kind,
+        )
+        phase_changes = self.phases.run_all(ctx)
+        if resolution_kind in {"standard", "dynamic_adjudication"}:
+            _sync_lorebook_for_patch(self.lorebook, ctx.turn_changes, turn_id)
+        return merge_state_changes(turn_changes, phase_changes)
 
     def _build_llm(self) -> LLMClient | None:
         try:
