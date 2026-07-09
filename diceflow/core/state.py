@@ -411,6 +411,23 @@ class GameState:
             if segments_n > 0:
                 self._advance_clock(segments_n)
 
+        relationship_events = changes.get("relationship_events")
+        if isinstance(relationship_events, dict):
+            for npc_id, ev in relationship_events.items():
+                entity = self.entities.get(npc_id)
+                if not isinstance(entity, dict) or not isinstance(ev, dict):
+                    continue
+                rel = entity.setdefault("relationship", {})
+                if not isinstance(rel.get("history"), list):
+                    rel["history"] = []
+                rel["history"].append({
+                    "turn_id": int(ev.get("turn_id", self.turn_id)),
+                    "delta": int(ev.get("delta", 0)),
+                    "reason": str(ev.get("reason", "")),
+                    "sentiment": str(ev.get("sentiment", "neutral")),
+                })
+                rel["history"] = rel["history"][-20:]
+
         self.entity_journal.extend(cleanup_expired_entities(self.entities, self.turn_id))
         self.entity_journal = self.entity_journal[-50:]
         self._refresh_end_state()
