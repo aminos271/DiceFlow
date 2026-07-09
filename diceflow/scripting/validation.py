@@ -87,6 +87,8 @@ OPTIONAL_TOP_LEVEL_TYPES = {
     "implied_entity_templates": dict,
     "implied_entity_rules": list,
     "dynamic_entity_templates": dict,
+    "world_model": dict,
+    "world_clock": dict,
     "runtime_generation_hooks": list,
     "world": dict,
     "locations": dict,
