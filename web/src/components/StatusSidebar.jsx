@@ -312,6 +312,12 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
         <div className="hp-text" style={{ color: hpColor(status.hp, status.max_hp) }}>
           ❤️ {status.hp} / {status.max_hp}
         </div>
+        {status.world_clock && (
+          <div className="scene-desc" style={{ marginTop: 4 }}>
+            🗓 第{status.world_clock.day}天 · {status.world_clock.segment}
+            {status.world_clock.weather ? ` · ${status.world_clock.weather}` : ''}
+          </div>
+        )}
       </AccordionSection>
 
       <AccordionSection
