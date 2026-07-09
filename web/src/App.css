@@ -2,26 +2,27 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0f0f1a;
-  --surface: #1a1a2e;
-  --surface2: #16213e;
-  --border: #2a2a4a;
-  --text: #c8c8d0;
-  --text-dim: #7a7a8a;
-  --text-bright: #e8e8f0;
-  --green: #4caf50;
-  --green-dim: #2e7d32;
-  --red: #f44336;
-  --red-dim: #b71c1c;
-  --yellow: #ff9800;
-  --yellow-dim: #e65100;
-  --blue: #42a5f5;
-  --cyan: #00bcd4;
-  --magenta: #ab47bc;
-  --white: #e0e0e0;
+  --bg: #1a1410;
+  --surface: #241c16;
+  --surface2: #2e251d;
+  --border: #3d3128;
+  --text: #d8c9a8;
+  --text-dim: #8a7a62;
+  --text-bright: #f2e6d0;
+  --green: #7a9b4f;
+  --green-dim: #5a7338;
+  --red: #b23a3a;
+  --red-dim: #7a2424;
+  --yellow: #c87f3a;
+  --yellow-dim: #8f5826;
+  --blue: #b08d57;
+  --cyan: #d4a24c;
+  --magenta: #b6543a;
+  --white: #f2e6d0;
 
   --radius: 8px;
   --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'Source Han Serif SC', 'Georgia', 'Times New Roman', serif;
 }
 
 html, body, #root {
@@ -141,8 +142,8 @@ textarea:focus {
   margin-top: 8px;
   font-size: 10px;
   color: var(--cyan);
-  background: rgba(0, 188, 212, 0.12);
-  border: 1px solid rgba(0, 188, 212, 0.3);
+  background: rgba(212, 162, 76, 0.12);
+  border: 1px solid rgba(212, 162, 76, 0.3);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -199,7 +200,7 @@ textarea:focus {
 .continue-ending {
   color: var(--yellow);
   font-size: 11px;
-  background: rgba(255, 152, 0, 0.1);
+  background: rgba(200, 127, 58, 0.1);
   padding: 2px 6px;
   border-radius: 3px;
 }
@@ -227,7 +228,7 @@ textarea:focus {
 }
 
 .btn-continue:hover {
-  background: #e65100;
+  background: #a86828;
 }
 
 .continue-section + h1 {
@@ -448,12 +449,12 @@ textarea:focus {
 
 .turn-card .dice-roll.success {
   color: var(--green);
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(122, 155, 79, 0.1);
 }
 
 .turn-card .dice-roll.fail {
   color: var(--red);
-  background: rgba(244, 67, 54, 0.1);
+  background: rgba(178, 58, 58, 0.1);
 }
 
 .mechanical-section {
@@ -497,8 +498,8 @@ textarea:focus {
 
 .resolution-card {
   margin-top: 12px;
-  border: 1px solid rgba(255, 152, 0, 0.45);
-  background: rgba(255, 152, 0, 0.08);
+  border: 1px solid rgba(200, 127, 58, 0.45);
+  background: rgba(200, 127, 58, 0.08);
   border-radius: var(--radius);
   padding: 10px 12px;
   color: var(--text);
@@ -630,7 +631,7 @@ textarea:focus {
 }
 
 .inv-item.selected {
-  background: rgba(0, 188, 212, 0.1);
+  background: rgba(212, 162, 76, 0.1);
   color: var(--cyan);
   border-radius: 4px;
 }
@@ -755,7 +756,7 @@ textarea:focus {
 }
 
 .entity-item.selected {
-  background: rgba(0, 188, 212, 0.1);
+  background: rgba(212, 162, 76, 0.1);
   border: 1px solid var(--cyan);
   border-radius: 4px;
 }
@@ -829,7 +830,7 @@ textarea:focus {
 }
 
 .hint-button:hover {
-  background: rgba(0, 188, 212, 0.08);
+  background: rgba(212, 162, 76, 0.08);
 }
 
 .hint-group {
@@ -984,7 +985,7 @@ textarea:focus {
   padding: 6px 16px;
   color: var(--yellow);
   font-size: 13px;
-  background: rgba(255, 152, 0, 0.06);
+  background: rgba(200, 127, 58, 0.06);
   border-top: 1px solid var(--border);
 }
 
@@ -1024,7 +1025,7 @@ textarea:focus {
 }
 
 .input-bar .btn-send:hover {
-  background: #00acc1;
+  background: #b8862e;
 }
 
 .input-bar .btn-send:disabled {
@@ -1034,22 +1035,22 @@ textarea:focus {
 }
 
 .input-bar .btn-force-crit {
-  background: rgba(255, 152, 0, 0.12);
+  background: rgba(200, 127, 58, 0.12);
   color: var(--yellow);
-  border: 1px solid rgba(255, 152, 0, 0.35);
+  border: 1px solid rgba(200, 127, 58, 0.35);
   padding: 8px 12px;
   font-weight: 700;
 }
 
 .input-bar .btn-force-crit:hover:not(:disabled) {
-  background: rgba(255, 152, 0, 0.18);
-  border-color: rgba(255, 152, 0, 0.55);
+  background: rgba(200, 127, 58, 0.18);
+  border-color: rgba(200, 127, 58, 0.55);
 }
 
 .input-bar .btn-force-crit.armed {
-  background: rgba(255, 152, 0, 0.24);
-  color: #ffd180;
-  box-shadow: 0 0 0 1px rgba(255, 152, 0, 0.25) inset;
+  background: rgba(200, 127, 58, 0.24);
+  color: #e8c987;
+  box-shadow: 0 0 0 1px rgba(200, 127, 58, 0.25) inset;
 }
 
 .input-bar .btn-force-crit:disabled {
@@ -1084,7 +1085,7 @@ textarea:focus {
 /* ── Meta Toast ────────────────────────────────────────────────── */
 .meta-toast {
   padding: 6px 16px;
-  background: rgba(171, 71, 188, 0.08);
+  background: rgba(182, 84, 58, 0.08);
   border-top: 1px solid var(--border);
   color: var(--magenta);
   font-size: 13px;
@@ -1282,7 +1283,7 @@ textarea:focus {
 }
 
 .btn-new-game:hover {
-  background: #00acc1;
+  background: #b8862e;
 }
 
 /* ── Popup Overlay ─────────────────────────────────────────────── */
