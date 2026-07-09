@@ -44,6 +44,13 @@ class GameState:
             for loc_id, loc_data in self.script.get("locations", {}).items()
         }
         self.npc_memories: dict[str, NpcMemory] = {}
+        self.world_clock: dict[str, Any] = deepcopy(
+            self.script.get("world_clock", _DEFAULT_WORLD_CLOCK)
+        )
+        if "day" not in self.world_clock:
+            self.world_clock.setdefault("day", 1)
+            self.world_clock.setdefault("segment", "morning")
+            self.world_clock.setdefault("weather", "")
 
     def apply_script_patch(self, patch: RuntimeScriptPatch | None) -> None:
         if not patch:
@@ -90,6 +97,7 @@ class GameState:
             "threads": {tid: t.to_dict() for tid, t in self.threads.items()},
             "locations": {lid: l.to_dict() for lid, l in self.locations.items()},
             "npc_memories": {mid: m.to_dict() for mid, m in self.npc_memories.items()},
+            "world_clock": deepcopy(self.world_clock),
         }
 
     def get_visible_entities(self) -> dict[str, dict[str, Any]]:
@@ -388,9 +396,41 @@ class GameState:
             self.recent_events.append(str(event))
         self.recent_events = self.recent_events[-10:]
 
+        set_clock = changes.get("set_clock")
+        if isinstance(set_clock, dict):
+            for key in ("day", "segment", "weather"):
+                if key in set_clock:
+                    self.world_clock[key] = set_clock[key]
+
+        advance = changes.get("advance_time")
+        if isinstance(advance, dict):
+            try:
+                segments_n = int(advance.get("segments", 0))
+            except (TypeError, ValueError):
+                segments_n = 0
+            if segments_n > 0:
+                self._advance_clock(segments_n)
+
         self.entity_journal.extend(cleanup_expired_entities(self.entities, self.turn_id))
         self.entity_journal = self.entity_journal[-50:]
         self._refresh_end_state()
+
+    def _advance_clock(self, segments_n: int) -> None:
+        segments = (
+            self.script.get("world_model", {}).get("time", {}).get("segments")
+            or _DEFAULT_TIME_SEGMENTS
+        )
+        if not isinstance(segments, list) or not segments:
+            segments = _DEFAULT_TIME_SEGMENTS
+        current = self.world_clock.get("segment", segments[0])
+        idx = segments.index(current) if current in segments else 0
+        idx += segments_n
+        day = int(self.world_clock.get("day", 1))
+        while idx >= len(segments):
+            idx -= len(segments)
+            day += 1
+        self.world_clock["day"] = day
+        self.world_clock["segment"] = segments[idx]
 
     def record_turn(self, record: dict[str, Any]) -> None:
         self.history.append(record)
@@ -504,6 +544,10 @@ class GameState:
                 if entity.get(key) != expected:
                     return False
         return True
+
+
+_DEFAULT_TIME_SEGMENTS = ["morning", "noon", "evening", "night", "deep_night"]
+_DEFAULT_WORLD_CLOCK = {"day": 1, "segment": "morning", "weather": ""}
 
 
 def _ensure_script_dict(script: object) -> dict[str, Any]:
