@@ -31,6 +31,7 @@ class TurnResolution(TypedDict, total=False):
     scene: dict[str, Any]
     player_state: dict[str, Any]
     lorebook_entries: list[dict[str, Any]]
+    world_clock: dict[str, Any]
 
 
 @dataclass

@@ -449,4 +449,5 @@ def _compact_state(state: GameState) -> dict[str, Any]:
         "flags": snapshot["flags"],
         "recent_events": snapshot["recent_events"],
         "recent_history": snapshot.get("history", []),
+        "world_clock": snapshot.get("world_clock", {}),
     }

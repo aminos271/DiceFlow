@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from copy import deepcopy
 from typing import Any
 
 from diceflow.app.ui import (
@@ -35,6 +36,7 @@ from diceflow.core.bootstrap import WorldBootstrap
 from diceflow.scripting.loader import Script, load_script
 from diceflow.world_model import PhaseContext, PhaseRegistry
 from diceflow.world_model.phases import OpenEndedPhase, ReactionPhase
+from diceflow.world_model.time import TimePhase
 
 
 class Game:
@@ -50,6 +52,7 @@ class Game:
         self.phases = PhaseRegistry()
         self.phases.register(ReactionPhase())
         self.phases.register(OpenEndedPhase())
+        self.phases.register(TimePhase())
 
     def run_turn(self, player_input: str, forced_roll: int | None = None) -> TurnRecord:
         turn_id = self.state.advance_turn()
@@ -374,6 +377,7 @@ def build_turn_resolution(
         ],
         scene=state.get_current_scene(),
         player_state=dict(state.player),
+        world_clock=deepcopy(state.world_clock),
         **lorebook_context,  # type: ignore[typeddict-item]
     )
 

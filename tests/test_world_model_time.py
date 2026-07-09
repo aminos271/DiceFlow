@@ -169,5 +169,23 @@ class TimePhaseLLMTest(unittest.TestCase):
         self.assertEqual(TimePhase().run(ctx), {})
 
 
+from diceflow.app.game import Game
+
+
+class TimeIntegrationTest(unittest.TestCase):
+    def test_wait_turn_advances_clock(self) -> None:
+        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        self.assertEqual(game.state.world_clock["segment"], "morning")
+        game.run_turn("等待")
+        self.assertEqual(game.state.world_clock["segment"], "noon")
+        self.assertIn("world_clock", game.state.get_snapshot())
+
+    def test_attack_does_not_advance_time(self) -> None:
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
+        before = dict(game.state.world_clock)
+        game.run_turn("攻击守卫", forced_roll=15)
+        self.assertEqual(game.state.world_clock, before)
+
+
 if __name__ == "__main__":
     unittest.main()
