@@ -232,6 +232,9 @@ def _make_restored_game(
             invalid_action_event=str(bootstrap_data.get("invalid_action_event", "行动没有成立，但局势仍在推进。")),
             default_no_outcome_event=str(bootstrap_data.get("default_no_outcome_event", "局势发生了变化，你必须立刻决定下一步。")),
             ending_texts=bootstrap_data.get("ending_texts", {}),
+            locations=bootstrap_data.get("locations", {}),
+            world_model=bootstrap_data.get("world_model", {}),
+            world_clock=bootstrap_data.get("world_clock", {}),
         )
         game = Game(script=bootstrap, use_llm=use_llm, lorebook=lorebook)
         if isinstance(snapshot, dict):
@@ -296,6 +299,8 @@ def _restore_snapshot_legacy(game: Game, snapshot: dict[str, Any]) -> None:
             mid: NpcMemory.from_dict(md) if isinstance(md, dict) else NpcMemory(id=mid, npc_entity_id="", summary="")
             for mid, md in npc_memories.items()
         }
+    if "world_clock" in snapshot and isinstance(snapshot["world_clock"], dict):
+        state.world_clock = dict(snapshot["world_clock"])
 
 
 def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
@@ -338,3 +343,5 @@ def _restore_snapshot_bootstrap(game: Game, snapshot: dict[str, Any]) -> None:
             mid: NpcMemory.from_dict(md) if isinstance(md, dict) else NpcMemory(id=mid, npc_entity_id="", summary="")
             for mid, md in npc_memories.items()
         }
+    if "world_clock" in snapshot and isinstance(snapshot["world_clock"], dict):
+        state.world_clock = dict(snapshot["world_clock"])

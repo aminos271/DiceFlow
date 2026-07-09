@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+import diceflow.web
 from diceflow.scripting.loader import load_script
 from diceflow.scripting.validation import validate_script
 from diceflow.core.bootstrap import WorldBootstrap
@@ -75,6 +80,29 @@ class WebWorldClockTest(unittest.TestCase):
         status = client.get(f"/api/sessions/{sid}").json()["status"]
         guard = next(e for e in status["known_entities"] if e["id"] == "guard_1")
         self.assertEqual(guard.get("relationship_history_count"), 1)
+
+
+class WorldModelPersistenceTest(unittest.TestCase):
+    def test_world_clock_and_config_survive_reload(self) -> None:
+        tmp = tempfile.mkdtemp()
+        try:
+            with patch.object(diceflow.web, "DATA_DIR", Path(tmp)):
+                store = diceflow.web.SessionStore()
+                sess = store.create(world_id="border_town_tavern", use_llm=False)
+                sess.game.state.apply_changes({"advance_time": {"segments": 2}})
+                store.save_to_disk(sess)
+                seg_before = sess.game.state.world_clock["segment"]
+                segs_before = get_time_config(sess.game.state)["segments"]
+
+                store2 = diceflow.web.SessionStore()
+                restored = store2.get(sess.session_id)
+                self.assertIsNotNone(restored)
+                # world_clock progress preserved
+                self.assertEqual(restored.game.state.world_clock["segment"], seg_before)
+                # custom world_model config preserved
+                self.assertEqual(get_time_config(restored.game.state)["segments"], segs_before)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
