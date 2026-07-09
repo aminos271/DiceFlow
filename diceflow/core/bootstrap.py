@@ -202,6 +202,8 @@ class WorldBootstrap:
     default_no_outcome_event: str = "局势发生了变化，你必须立刻决定下一步。"
     ending_texts: dict = field(default_factory=dict)
     locations: dict = field(default_factory=dict)
+    world_model: dict = field(default_factory=dict)
+    world_clock: dict = field(default_factory=dict)
 
     def to_script_dict(self) -> dict[str, Any]:
         """Produce a dict that satisfies the minimal Script interface."""
@@ -229,6 +231,8 @@ class WorldBootstrap:
             "default_no_outcome_event": self.default_no_outcome_event,
             "ending_texts": deepcopy(self.ending_texts),
             "locations": deepcopy(self.locations),
+            "world_model": deepcopy(self.world_model),
+            "world_clock": deepcopy(self.world_clock),
         }
 
 
@@ -472,6 +476,8 @@ def _bootstrap_from_world_config(
         default_no_outcome_event=str(config.get("default_no_outcome_event", "局势发生了变化，你必须立刻决定下一步。")),
         ending_texts=deepcopy(config.get("ending_texts", {})),
         locations=deepcopy(config.get("locations", {})),
+        world_model=deepcopy(config.get("world_model", {})),
+        world_clock=deepcopy(config.get("world_clock", {})),
     )
 
 
