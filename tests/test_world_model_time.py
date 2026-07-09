@@ -168,6 +168,28 @@ class TimePhaseLLMTest(unittest.TestCase):
         ctx.llm = None
         self.assertEqual(TimePhase().run(ctx), {})
 
+    def test_llm_skipped_for_quick_actions(self) -> None:
+        # inspect/attack are instant — must not cost an LLM call
+        for action in (
+            {"type": "inspect", "target_id": "guard_1", "method_text": "观察守卫"},
+            {"type": "attack", "target_id": "guard_1", "method_text": "攻击守卫", "intent_family": "attack"},
+            {"type": "take", "target_id": "item_1", "method_text": "拿起钥匙"},
+        ):
+            llm = _FakeTimeLLM("large")
+            out = TimePhase().run(self._ctx(action, llm))
+            self.assertEqual(llm.call_count, 0, f"LLM should not be called for {action['type']}")
+            self.assertEqual(out, {})
+
+    def test_llm_called_for_sustained_actions(self) -> None:
+        # talk / keyword-sustained free-form still asks the LLM
+        for action in (
+            {"type": "talk", "target_id": "guard_1", "method_text": "和守卫长谈"},
+            {"type": "unknown", "method_text": "仔细搜查房间的每个角落"},
+        ):
+            llm = _FakeTimeLLM("medium")
+            TimePhase().run(self._ctx(action, llm))
+            self.assertEqual(llm.call_count, 1, f"LLLM should be called for {action['method_text']}")
+
 
 from diceflow.app.game import Game
 

@@ -9,6 +9,15 @@ from diceflow.world_model.schemas import get_time_config
 
 StateChanges = dict[str, Any]
 
+# Action types / method keywords that can plausibly consume notable in-world
+# time. Quick actions (inspect/attack/take/open) skip the LLM time judgment
+# entirely — they are instant and would almost always return "none".
+_TIME_PLAUSIBLE_TYPES = frozenset({"talk", "social", "use"})
+_TIME_KEYWORDS = frozenset({
+    "谈", "聊", "交谈", "商量", "讨论", "打听", "盘问",
+    "搜", "寻找", "搜查", "翻找", "研究", "制作", "搬", "整理",
+})
+
 
 class TimePhase:
     """Action-driven world clock.
@@ -39,6 +48,8 @@ class TimePhase:
         return {"set_clock": new_clock, "events": [_event_for_segment(new_clock, cfg)]}
 
     def _llm_path(self, ctx: PhaseContext, cfg: dict) -> StateChanges:
+        if not _is_time_plausible(ctx):
+            return {}
         llm = ctx.llm
         if llm is None or not getattr(llm, "narration_available", False):
             return {}
@@ -67,6 +78,17 @@ class TimePhase:
         if reason:
             event = f"{event}（{reason}）"
         return {"set_clock": new_clock, "events": [event]}
+
+
+def _is_time_plausible(ctx: PhaseContext) -> bool:
+    """Whether an action could plausibly consume notable time (worth an LLM call)."""
+    if str(ctx.action.get("type", "")) in _TIME_PLAUSIBLE_TYPES:
+        return True
+    method = " ".join(str(v) for v in (
+        ctx.action.get("raw_input", ""), ctx.action.get("method_text", ""),
+        ctx.action.get("method", ""),
+    ) if v)
+    return any(kw in method for kw in _TIME_KEYWORDS)
 
 
 def _match_trigger(triggers: list, ctx: PhaseContext) -> dict | None:
