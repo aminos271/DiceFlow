@@ -9,6 +9,10 @@ DiceFlow 是一个桌面角色扮演游戏（TRPG）引擎 MVP，结合确定性
 - **D20 规则引擎**：基于 D20 的判定，支持 DC 修饰符和结果表
 - **动态裁决**：LLM + 启发式回退，处理未脚本化的行动（欺骗、潜行、发现等）
 - **动态世界**：LLM 驱动的场景过渡与运行时内容生成
+- **世界模型底座**：一组可复用、题材无关的通用子系统，世界通过 `world_model` 配置随用随改
+  - **自注册阶段**：回合后处理链（reaction → open_ended → time → favorability）由 `PhaseRegistry` 驱动，加子系统不改主循环
+  - **时间系统**：`world_clock`（天数/时段/天气），动作驱动推进；LLM 定性判断时间影响 + 代码换算数值，含 `--no-llm` 启发式回退
+  - **好感/关系系统**：实体 `relationship` 历史 + `favorability`；LLM 判断关系影响（sentiment/magnitude 桶）+ 确定性阈值反应（越线翻转 disposition/hostile + 写 NPC 记忆）
 - **Web 前端**：React 浏览器界面，无需终端 UTF-8 支持
 - **会话持久化**：游戏历史自动保存至磁盘
 
@@ -82,6 +86,7 @@ diceflow/
   app/              # 应用层（Game 类、CLI、UI 渲染、提示生成）
   config.py         # 环境变量与 API 配置
   core/             # 核心游戏逻辑
+  world_model/      # 世界模型底座（PhaseRegistry、时间、好感等通用子系统）
   scripting/        # 脚本加载、原型系统、规则解析、验证
   llm/              # LLM 客户端、启发式解析与回退
   web/              # Web 服务端（FastAPI + 会话持久化）
