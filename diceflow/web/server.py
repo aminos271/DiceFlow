@@ -733,6 +733,9 @@ def _entity_record(session, entity_id: str, ent: dict[str, Any], journal_entry: 
     if ent.get("type") == "npc" or "npc" in ent.get("tags", []):
         record["disposition"] = ent.get("disposition", "neutral")
         record["favorability"] = ent.get("favorability", 0)
+        rel = ent.get("relationship")
+        if isinstance(rel, dict) and isinstance(rel.get("history"), list):
+            record["relationship_history"] = rel["history"][-10:]
         personality = ent.get("personality")
         if isinstance(personality, dict):
             record["personality"] = {

@@ -105,5 +105,25 @@ class WorldModelPersistenceTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class WorldModelSurfaceTest(unittest.TestCase):
+    def test_turn_card_shows_time_advance(self) -> None:
+        client = TestClient(app)
+        sid = client.post("/api/sessions", json={"world_id": "border_town_tavern", "use_llm": False}).json()["session_id"]
+        turn = client.post(f"/api/sessions/{sid}/turns", json={"input": "等待", "forced_roll": 15}).json()["turn"]
+        self.assertTrue(
+            any("时间推进到" in line for line in turn.get("mechanical_results", [])),
+            f"expected a time-advance line, got {turn.get('mechanical_results')}",
+        )
+
+    def test_entity_record_exposes_relationship_history(self) -> None:
+        client = TestClient(app)
+        sid = client.post("/api/sessions", json={"world_id": "tomb_entrance", "use_llm": False}).json()["session_id"]
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "攻击守卫", "forced_roll": 15})
+        status = client.get(f"/api/sessions/{sid}").json()["status"]
+        guard = next(e for e in status["known_entities"] if e["id"] == "guard_1")
+        self.assertIn("relationship_history", guard)
+        self.assertEqual(len(guard["relationship_history"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

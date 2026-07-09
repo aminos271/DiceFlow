@@ -12,6 +12,15 @@ function _dispositionLabel(d) {
   return labels[d] || d
 }
 
+function _clockMood(segment) {
+  const s = (segment || '').toLowerCase()
+  if (/(夜|night|deep|midnight|深夜)/.test(s)) return { emoji: '🌙', color: 'var(--text-dim)' }
+  if (/(黄昏|evening|dusk|暮)/.test(s)) return { emoji: '🌇', color: 'var(--yellow)' }
+  if (/(正午|noon|midday)/.test(s)) return { emoji: '☀️', color: 'var(--cyan)' }
+  if (/(清晨|morning|dawn|晨)/.test(s)) return { emoji: '🌅', color: 'var(--green)' }
+  return { emoji: '🗓', color: 'var(--text-bright)' }
+}
+
 function AccordionSection({ title, count, expanded, onToggle, children }) {
   return (
     <div className="status-section">
@@ -261,6 +270,22 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
               ))}
             </>
           )}
+          {entity.relationship_history && entity.relationship_history.length > 0 && (
+            <>
+              <div className="npc-memories-title">关系变化</div>
+              {entity.relationship_history.map((ev, i) => (
+                <div key={i} className={`memory-item memory-${ev.sentiment}`}>
+                  <span className="memory-sentiment">
+                    {ev.sentiment === 'positive' ? '↑' : ev.sentiment === 'negative' ? '↓' : '·'}
+                  </span>
+                  <span className="memory-summary">
+                    {ev.delta > 0 ? `+${ev.delta}` : ev.delta}{ev.reason ? ` ${ev.reason}` : ''}
+                  </span>
+                  <span className="memory-turn">T{ev.turn_id}</span>
+                </div>
+              ))}
+            </>
+          )}
           {entity.last_seen_turn_id !== undefined && (
             <DetailRow label="最后出现在回合" value={String(entity.last_seen_turn_id)} />
           )}
@@ -312,12 +337,16 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
         <div className="hp-text" style={{ color: hpColor(status.hp, status.max_hp) }}>
           ❤️ {status.hp} / {status.max_hp}
         </div>
-        {status.world_clock && (
-          <div className="scene-desc" style={{ marginTop: 4 }}>
-            🗓 第{status.world_clock.day}天 · {status.world_clock.segment}
-            {status.world_clock.weather ? ` · ${status.world_clock.weather}` : ''}
-          </div>
-        )}
+        {status.world_clock && (() => {
+          const mood = _clockMood(status.world_clock.segment)
+          return (
+            <div className="clock-chip" style={{ color: mood.color, borderColor: mood.color }}>
+              <span className="clock-emoji">{mood.emoji}</span>
+              第 {status.world_clock.day} 天 · {status.world_clock.segment}
+              {status.world_clock.weather ? ` · ${status.world_clock.weather}` : ''}
+            </div>
+          )
+        })()}
       </AccordionSection>
 
       <AccordionSection

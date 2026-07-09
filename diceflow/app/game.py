@@ -507,6 +507,7 @@ def _presentation_context(state: GameState) -> dict[str, Any]:
             }
             for entity_id, entity in state.entities.items()
         },
+        "world_clock": dict(state.world_clock),
     }
 
 
@@ -586,6 +587,14 @@ def _mechanical_results(
 
     if before.get("hostile_count") != after.get("hostile_count"):
         lines.append(f"威胁：{before.get('hostile_count')} -> {after.get('hostile_count')}")
+
+    before_clock = before.get("world_clock") or {}
+    after_clock = after.get("world_clock") or {}
+    if before_clock.get("segment") != after_clock.get("segment") or before_clock.get("day") != after_clock.get("day"):
+        seg = after_clock.get("segment", "")
+        day = after_clock.get("day", 1)
+        weather = after_clock.get("weather", "")
+        lines.append(f"时间推进到 {seg}（第 {day} 天）{'，' + weather if weather else ''}".rstrip("，"))
 
     if not lines and check:
         result = check.get("result", "unknown")

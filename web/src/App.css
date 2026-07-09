@@ -382,9 +382,18 @@ textarea:focus {
 .turn-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: var(--radius);
   padding: 14px 16px;
   animation: fadeIn 0.3s ease;
+}
+
+.turn-card.turn-success {
+  border-left-color: var(--green);
+}
+
+.turn-card.turn-fail {
+  border-left-color: var(--red);
 }
 
 @keyframes fadeIn {
@@ -491,9 +500,10 @@ textarea:focus {
 }
 
 .turn-card .narration {
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.6;
+  color: var(--text-bright);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.75;
 }
 
 .resolution-card {
@@ -606,6 +616,22 @@ textarea:focus {
 .hp-text {
   font-size: 13px;
   color: var(--text-bright);
+}
+
+.clock-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface2);
+}
+
+.clock-emoji {
+  font-size: 14px;
 }
 
 .inv-list {
@@ -1747,6 +1773,21 @@ textarea:focus {
 }
 
 /* ── Responsive: stack vertically on narrow windows ──────────── */
+@media (max-width: 900px) {
+  .game-content {
+    flex-direction: column;
+  }
+  .status-sidebar {
+    width: 100%;
+    max-height: 42vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .turn-history {
+    min-height: 0;
+  }
+}
+
 @media (max-width: 760px) {
   .popup-card.popup-lorebook {
     width: 95vw;

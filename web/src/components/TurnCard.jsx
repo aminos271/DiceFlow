@@ -16,7 +16,7 @@ export default function TurnCard({ turn }) {
   const isSuccess = result === 'success' || result === 'critical_success'
 
   return (
-    <div className="turn-card">
+    <div className={`turn-card${isSuccess ? ' turn-success' : (result ? ' turn-fail' : '')}`}>
       <div className="turn-header">
         <span className="turn-id">回合 {turn_id}｜{player_input}</span>
       </div>
