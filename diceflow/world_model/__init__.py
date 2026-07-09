@@ -1,4 +1,5 @@
 from diceflow.world_model.base import Phase, PhaseContext
+from diceflow.world_model.favorability import FavorabilityPhase
 from diceflow.world_model.phases import OpenEndedPhase, ReactionPhase
 from diceflow.world_model.time import TimePhase
 from diceflow.world_model.registry import PhaseRegistry
@@ -11,6 +12,7 @@ __all__ = [
     "ReactionPhase",
     "OpenEndedPhase",
     "TimePhase",
+    "FavorabilityPhase",
     "DEFAULT_WORLD_MODEL",
     "get_world_model_config",
     "get_time_config",
