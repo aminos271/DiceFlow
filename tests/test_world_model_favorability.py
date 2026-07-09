@@ -76,7 +76,10 @@ class FavorabilityPhaseHeuristicTest(unittest.TestCase):
         self.assertEqual(FavorabilityPhase().run(ctx), {})
 
     def test_existing_script_delta_recorded_no_extra_delta(self) -> None:
-        # outcome table already gave +2 favorability and set disposition
+        # outcome table already gave +2 favorability; keep favorability low so
+        # no threshold crosses (this test is about no double-counted delta,
+        # not threshold behavior — covered separately).
+        self.state.apply_changes({"set_entity_states": {"barkeeper": {"favorability": 0}}})
         self.state.apply_changes({"entities": {"barkeeper": {"favorability_delta": 2}}})
         ctx = _ctx(self.state,
                    action={"type": "talk", "target_id": "barkeeper", "intent_family": "talk"},
@@ -110,6 +113,19 @@ class FavorabilityPhaseHeuristicTest(unittest.TestCase):
                    action={"type": "inspect", "target_id": "barkeeper", "intent_family": "inspect"},
                    turn_changes={})
         self.assertEqual(FavorabilityPhase().run(ctx), {})
+
+    def test_script_delta_triggers_threshold(self) -> None:
+        # tomb_entrance has default thresholds (gte:5 -> friendly). A scripted
+        # talk +1 that crosses 5 should flip disposition, even though the delta
+        # came from the outcome table (not the LLM/heuristic).
+        state = GameState(load_script("tomb_entrance"))
+        state.apply_changes({"set_entity_states": {"guard_1": {"favorability": 4}}})
+        state.apply_changes({"entities": {"guard_1": {"favorability_delta": 1}}})  # branch applied outcome
+        ctx = _ctx(state,
+                   action={"type": "talk", "target_id": "guard_1", "intent_family": "talk"},
+                   turn_changes={"entities": {"guard_1": {"favorability_delta": 1}}})
+        out = FavorabilityPhase().run(ctx)
+        self.assertEqual(out["entities"]["guard_1"].get("disposition"), "friendly")
 
 
 class _FakeFavorabilityLLM:
@@ -154,9 +170,14 @@ class FavorabilityPhaseLLMTest(unittest.TestCase):
 
     def test_existing_delta_skips_llm(self) -> None:
         llm = _FakeFavorabilityLLM("positive", "large")
-        out = FavorabilityPhase().run(self._ctx(
-            {"type": "talk", "target_id": "barkeeper", "intent_family": "talk"},
-            llm, turn_changes={"entities": {"barkeeper": {"favorability_delta": 1}}}))
+        state = self.state
+        state.apply_changes({"set_entity_states": {"barkeeper": {"favorability": 0}}})
+        ctx = _ctx(state,
+                   action={"type": "talk", "target_id": "barkeeper", "intent_family": "talk"},
+                   resolution_kind="standard",
+                   turn_changes={"entities": {"barkeeper": {"favorability_delta": 1}}})
+        ctx.llm = llm
+        out = FavorabilityPhase().run(ctx)
         self.assertEqual(llm.call_count, 0)
         self.assertNotIn("entities", out)
 

@@ -35,6 +35,10 @@ class FavorabilityPhase:
             existing = _existing_favorability_delta(ctx, npc_id)
             if existing is not None:
                 _record_history(out, npc_id, existing, _sentiment_for(existing), "脚本结果", ctx)
+                cur = int(ctx.state.entities.get(npc_id, {}).get("favorability", 0))
+                # the scripted delta was already applied by the branch, so the
+                # crossing is (cur - existing) -> cur
+                _apply_thresholds(out, ctx, npc_id, cur - existing, cur, cfg)
                 continue
             if not _is_relation_relevant(ctx, npc_id):
                 continue
@@ -43,7 +47,8 @@ class FavorabilityPhase:
                 continue
             _emit_delta(out, npc_id, delta)
             _record_history(out, npc_id, delta, sentiment, reason, ctx)
-            _apply_thresholds(out, ctx, npc_id, delta, cfg)
+            old = int(ctx.state.entities.get(npc_id, {}).get("favorability", 0))
+            _apply_thresholds(out, ctx, npc_id, old, old + delta, cfg)
         return out
 
     def _judge(self, ctx: PhaseContext, npc_id: str, cfg: dict) -> tuple[int, str, str]:
@@ -148,10 +153,8 @@ def _emit_delta(out: StateChanges, npc_id: str, delta: int) -> None:
     out.setdefault("entities", {}).setdefault(npc_id, {})["favorability_delta"] = delta
 
 
-def _apply_thresholds(out: StateChanges, ctx: PhaseContext, npc_id: str, delta: int, cfg: dict) -> None:
+def _apply_thresholds(out: StateChanges, ctx: PhaseContext, npc_id: str, old: int, new: int, cfg: dict) -> None:
     entity = ctx.state.entities.get(npc_id, {})
-    old = int(entity.get("favorability", 0))
-    new = old + delta
     current_hostile = bool(entity.get("hostile"))
     current_disposition = str(entity.get("disposition", "neutral"))
     mandated_hostile = current_hostile
@@ -180,15 +183,13 @@ def _apply_thresholds(out: StateChanges, ctx: PhaseContext, npc_id: str, delta: 
                 mandated_hostile = bool(setting["hostile"])
             if "disposition" in setting:
                 mandated_disposition = str(setting["disposition"])
-    ent_change = out.setdefault("entities", {}).setdefault(npc_id, {})
-    changed = False
+    ent_change: dict[str, Any] = {}
     if mandated_hostile != current_hostile:
         ent_change["hostile"] = mandated_hostile
-        changed = True
     if mandated_disposition != current_disposition:
         ent_change["disposition"] = mandated_disposition
-        changed = True
-    if changed:
+    if ent_change:
+        out.setdefault("entities", {})[npc_id] = ent_change
         out.setdefault("add_npc_memory", {})[f"mem_rel_{npc_id}_{ctx.state.turn_id}"] = {
             "npc_entity_id": npc_id,
             "summary": f"关系变化：好感 {old} -> {new}（{mandated_disposition}）。",
