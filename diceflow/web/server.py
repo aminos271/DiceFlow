@@ -138,6 +138,7 @@ class StatusData(BaseModel):
     exits: list[dict[str, str]] = Field(default_factory=list)
     is_game_over: bool = False
     ending: str | None = None
+    world_clock: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────
@@ -608,6 +609,7 @@ def _build_status(session) -> StatusData:
         exits=_build_exit_list(state),
         is_game_over=bool(state.flags.get("game_over")),
         ending=state.flags.get("ending"),
+        world_clock=dict(state.world_clock),
     )
 
 
@@ -721,6 +723,9 @@ def _entity_record(session, entity_id: str, ent: dict[str, Any], journal_entry: 
         "last_interaction_turn_id": lifecycle.get("last_player_interaction_turn_id"),
         "turns_since_interaction": turns_since,
         "can_edit": _editable_entity_error(session, entity_id, ent) is None,
+        "relationship_history_count": len(
+            (ent.get("relationship") or {}).get("history", [])
+        ) if isinstance(ent.get("relationship"), dict) else 0,
     }
     if "hp" in ent:
         record["hp"] = ent["hp"]

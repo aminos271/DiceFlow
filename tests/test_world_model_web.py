@@ -7,6 +7,8 @@ from diceflow.scripting.validation import validate_script
 from diceflow.core.bootstrap import WorldBootstrap
 from diceflow.core.state import GameState
 from diceflow.world_model.schemas import get_favorability_config, get_time_config
+from fastapi.testclient import TestClient
+from diceflow.web.server import app
 
 
 class ScriptWorldModelKeysTest(unittest.TestCase):
@@ -56,6 +58,23 @@ class BorderTownDemoConfigTest(unittest.TestCase):
         state = GameState(load_script("border_town_tavern"))
         self.assertEqual(state.world_clock["segment"], "清晨")
         self.assertEqual(state.world_clock["day"], 1)
+
+
+class WebWorldClockTest(unittest.TestCase):
+    def test_status_exposes_world_clock(self) -> None:
+        client = TestClient(app)
+        sid = client.post("/api/sessions", json={"world_id": "border_town_tavern", "use_llm": False}).json()["session_id"]
+        status = client.post(f"/api/sessions/{sid}/turns", json={"input": "等待", "forced_roll": 15}).json()["status"]
+        self.assertIn("world_clock", status)
+        self.assertEqual(status["world_clock"]["segment"], "正午")  # 清晨 +1
+
+    def test_entity_record_has_relationship_history_count(self) -> None:
+        client = TestClient(app)
+        sid = client.post("/api/sessions", json={"world_id": "tomb_entrance", "use_llm": False}).json()["session_id"]
+        client.post(f"/api/sessions/{sid}/turns", json={"input": "攻击守卫", "forced_roll": 15})
+        status = client.get(f"/api/sessions/{sid}").json()["status"]
+        guard = next(e for e in status["known_entities"] if e["id"] == "guard_1")
+        self.assertEqual(guard.get("relationship_history_count"), 1)
 
 
 if __name__ == "__main__":
