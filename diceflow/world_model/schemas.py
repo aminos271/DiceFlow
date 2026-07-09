@@ -16,11 +16,13 @@ DEFAULT_WORLD_MODEL: dict[str, Any] = {
             "deep_night": "夜深人静",
         },
         "triggers": [
-            {"when": {"action_type": "wait"}, "advance": {"segments": 1}},
-            {"when": {"resolution_kind": "transition_attempt"}, "advance": {"segments": 1}},
+            # More specific (method keyword) triggers first, so e.g. a "wait"
+            # whose method says "过夜" jumps overnight instead of +1 segment.
             {"when": {"method_contains": "过夜"}, "advance": {"next_day": True}},
             {"when": {"method_contains": "休息"}, "advance": {"next_day": True}},
             {"when": {"method_contains": "睡"}, "advance": {"next_day": True}},
+            {"when": {"action_type": "wait"}, "advance": {"segments": 1}},
+            {"when": {"resolution_kind": "transition_attempt"}, "advance": {"segments": 1}},
         ],
     },
 }
