@@ -6,6 +6,7 @@ from diceflow.core.state import GameState
 from diceflow.scripting.loader import load_script
 from diceflow.world_model.base import Phase, PhaseContext
 from diceflow.world_model.registry import PhaseRegistry
+from diceflow.world_model.schemas import DEFAULT_WORLD_MODEL, get_world_model_config
 
 
 class PhaseContextTest(unittest.TestCase):
@@ -99,6 +100,20 @@ class PhaseRegistryTest(unittest.TestCase):
         merged = reg.run_all(self.ctx)
         self.assertEqual(merged, {})
         self.assertEqual(self.ctx.turn_changes, {})
+
+
+class WorldModelConfigTest(unittest.TestCase):
+    def test_returns_empty_dict_when_unset(self) -> None:
+        state = GameState(load_script("border_town_tavern"))
+        # border_town_tavern has no world_model section yet
+        cfg = get_world_model_config(state)
+        self.assertIsInstance(cfg, dict)
+
+    def test_script_override_visible(self) -> None:
+        state = GameState(load_script("border_town_tavern"))
+        state.script["world_model"] = {"time": {"segments": ["dawn", "dusk"]}}
+        cfg = get_world_model_config(state)
+        self.assertEqual(cfg["time"]["segments"], ["dawn", "dusk"])
 
 
 if __name__ == "__main__":
