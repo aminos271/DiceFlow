@@ -112,5 +112,54 @@ class FavorabilityPhaseHeuristicTest(unittest.TestCase):
         self.assertEqual(FavorabilityPhase().run(ctx), {})
 
 
+class _FakeFavorabilityLLM:
+    narration_available = True
+
+    def __init__(self, sentiment, magnitude, reason="帮助搬货") -> None:
+        self.sentiment = sentiment
+        self.magnitude = magnitude
+        self.reason = reason
+        self.call_count = 0
+
+    def judge_favorability_effect(self, action, npc_id, turn_changes, state) -> dict:
+        self.call_count += 1
+        self.last_npc = npc_id
+        return {"sentiment": self.sentiment, "magnitude": self.magnitude, "reason": self.reason}
+
+
+class FavorabilityPhaseLLMTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.state = GameState(load_script("border_town_tavern"))
+
+    def _ctx(self, action, llm, turn_changes=None) -> PhaseContext:
+        ctx = _ctx(self.state, action=action, turn_changes=turn_changes)
+        ctx.llm = llm
+        return ctx
+
+    def test_llm_positive_medium_advances_favorability(self) -> None:
+        llm = _FakeFavorabilityLLM("positive", "medium")
+        out = FavorabilityPhase().run(self._ctx(
+            {"type": "social", "target_id": "barkeeper", "intent_family": "social",
+             "method_text": "我帮老板搬货"}, llm))
+        self.assertEqual(llm.call_count, 1)
+        self.assertEqual(out["entities"]["barkeeper"]["favorability_delta"], 2)  # medium=2
+        self.assertEqual(out["relationship_events"]["barkeeper"]["sentiment"], "positive")
+
+    def test_llm_neutral_no_change(self) -> None:
+        llm = _FakeFavorabilityLLM("neutral", "small")
+        out = FavorabilityPhase().run(self._ctx(
+            {"type": "talk", "target_id": "barkeeper", "intent_family": "talk",
+             "method_text": "随口问好"}, llm))
+        self.assertEqual(out, {})
+
+    def test_existing_delta_skips_llm(self) -> None:
+        llm = _FakeFavorabilityLLM("positive", "large")
+        out = FavorabilityPhase().run(self._ctx(
+            {"type": "talk", "target_id": "barkeeper", "intent_family": "talk"},
+            llm, turn_changes={"entities": {"barkeeper": {"favorability_delta": 1}}}))
+        self.assertEqual(llm.call_count, 0)
+        self.assertNotIn("entities", out)
+
+
 if __name__ == "__main__":
     unittest.main()

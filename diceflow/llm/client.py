@@ -95,6 +95,7 @@ class LLMClient:
         self.npc_autonomy_prompt = (PROMPT_DIR / "npc_autonomy.txt").read_text(encoding="utf-8")
         self.director_mode_prompt = (PROMPT_DIR / "director_mode.txt").read_text(encoding="utf-8")
         self.time_judge_prompt = (PROMPT_DIR / "time_judge.txt").read_text(encoding="utf-8")
+        self.favorability_judge_prompt = (PROMPT_DIR / "favorability_judge.txt").read_text(encoding="utf-8")
 
     # ── Intent / Adjudication (use intent_client) ────────────────────
 
@@ -151,6 +152,35 @@ class LLMClient:
                         "action": action,
                         "current_clock": state.world_clock,
                         "scene": state.scene,
+                        "recent_events": state.recent_events,
+                    },
+                    ensure_ascii=False)},
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
+    def judge_favorability_effect(
+        self, action: Action, npc_id: str, turn_changes: dict[str, Any], state: GameState
+    ) -> dict[str, Any]:
+        """Qualitatively judge how an action affects the relationship with one NPC.
+
+        Returns ``{"sentiment": "positive|negative|neutral",
+        "magnitude": "small|medium|large", "reason": ...}``. Only the bucket
+        is LLM-produced; the engine maps it to a favorability delta.
+        """
+        npc = state.entities.get(npc_id, {})
+        content = self._narration_chat(
+            [
+                {"role": "system", "content": self.favorability_judge_prompt},
+                {"role": "user", "content": json.dumps(
+                    {
+                        "action": action,
+                        "npc_id": npc_id,
+                        "npc": {k: v for k, v in npc.items()
+                                if k in ("name", "disposition", "favorability", "personality")},
+                        "turn_changes_for_npc": turn_changes.get("entities", {}).get(npc_id, {}),
+                        "current_clock": state.world_clock,
                         "recent_events": state.recent_events,
                     },
                     ensure_ascii=False)},

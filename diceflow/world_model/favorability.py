@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from diceflow.core.intent import action_family
 from diceflow.world_model.base import Phase, PhaseContext
 from diceflow.world_model.schemas import get_favorability_config
 
 StateChanges = dict[str, Any]
-
-_RELATION_RELEVANT_FAMILIES = frozenset({"talk", "social", "attack", "use", "deception"})
 
 
 class FavorabilityPhase:
@@ -50,7 +47,31 @@ class FavorabilityPhase:
         return out
 
     def _judge(self, ctx: PhaseContext, npc_id: str, cfg: dict) -> tuple[int, str, str]:
-        # LLM path added in Task 4. Heuristic fallback:
+        llm = ctx.llm
+        if (llm is not None
+                and getattr(llm, "narration_available", False)
+                and hasattr(llm, "judge_favorability_effect")):
+            try:
+                verdict = llm.judge_favorability_effect(ctx.action, npc_id, ctx.turn_changes, ctx.state)
+            except Exception:
+                verdict = None
+            if isinstance(verdict, dict):
+                sentiment = str(verdict.get("sentiment") or "neutral")
+                magnitude = str(verdict.get("magnitude") or "small")
+                table = cfg.get("magnitude_table", {})
+                base = table.get(magnitude, 0) if isinstance(table, dict) else 0
+                try:
+                    base = int(base)
+                except (TypeError, ValueError):
+                    base = 0
+                if sentiment == "positive":
+                    delta = base
+                elif sentiment == "negative":
+                    delta = -base
+                else:
+                    delta = 0
+                return delta, sentiment, str(verdict.get("reason") or "")
+        # heuristic fallback
         hp_delta = _hp_delta_for(ctx, npc_id)
         if hp_delta is not None and hp_delta < 0:
             return -2, "negative", "攻击/伤害"
@@ -99,10 +120,12 @@ def _hp_delta_for(ctx: PhaseContext, npc_id: str) -> int | None:
 
 
 def _is_relation_relevant(ctx: PhaseContext, npc_id: str) -> bool:
+    """An action targeting an NPC, or one that hurt an NPC, may move the
+    relationship. The LLM/heuristic decides the magnitude (neutral -> 0)."""
     if _hp_delta_for(ctx, npc_id) is not None:
         return True
     target_id = str(ctx.action.get("target_id") or "")
-    return target_id == npc_id and action_family(ctx.action) in _RELATION_RELEVANT_FAMILIES
+    return target_id == npc_id
 
 
 def _sentiment_for(delta: int) -> str:
