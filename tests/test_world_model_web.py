@@ -5,6 +5,8 @@ import unittest
 from diceflow.scripting.loader import load_script
 from diceflow.scripting.validation import validate_script
 from diceflow.core.bootstrap import WorldBootstrap
+from diceflow.core.state import GameState
+from diceflow.world_model.schemas import get_favorability_config, get_time_config
 
 
 class ScriptWorldModelKeysTest(unittest.TestCase):
@@ -36,6 +38,24 @@ class WorldBootstrapPassThroughTest(unittest.TestCase):
         s = WorldBootstrap(world_id="t", title="t").to_script_dict()
         self.assertEqual(s.get("world_model"), {})
         self.assertEqual(s.get("world_clock"), {})
+
+
+class BorderTownDemoConfigTest(unittest.TestCase):
+    def test_script_exposes_custom_time_config(self) -> None:
+        state = GameState(load_script("border_town_tavern"))
+        cfg = get_time_config(state)
+        self.assertEqual(cfg["segments"], ["清晨", "正午", "黄昏", "深夜"])
+
+    def test_script_exposes_custom_favorability_magnitude(self) -> None:
+        state = GameState(load_script("border_town_tavern"))
+        cfg = get_favorability_config(state)
+        self.assertEqual(cfg["magnitude_table"]["large"], 4)  # demo override
+        self.assertTrue(any("lte" in r for r in cfg["thresholds"]))
+
+    def test_state_starts_at_demo_clock(self) -> None:
+        state = GameState(load_script("border_town_tavern"))
+        self.assertEqual(state.world_clock["segment"], "清晨")
+        self.assertEqual(state.world_clock["day"], 1)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,29 @@ world:
   - 军事级别武器
   max_runtime_dc: 14
   max_new_entities_per_transition: 3
+world_clock:
+  day: 1
+  segment: 清晨
+  weather: ''
+world_model:
+  time:
+    segments: [清晨, 正午, 黄昏, 深夜]
+    magnitude_table: {none: 0, small: 1, medium: 2, large: 4}
+    segment_events:
+      清晨: 晨光熹微
+      正午: 日头高悬
+      黄昏: 暮色四合
+      深夜: 夜阑人静
+    triggers:
+      - {when: {method_contains: 过夜}, advance: {next_day: true}}
+      - {when: {method_contains: 休息}, advance: {next_day: true}}
+      - {when: {action_type: wait}, advance: {segments: 1}}
+      - {when: {resolution_kind: transition_attempt}, advance: {segments: 1}}
+  favorability:
+    magnitude_table: {small: 1, medium: 2, large: 4}
+    thresholds:
+      - {lte: -5, set: {hostile: true, disposition: hostile}}
+      - {gte: 5, set: {disposition: friendly}}
 entities:
   barkeeper:
     name: 酒馆老板

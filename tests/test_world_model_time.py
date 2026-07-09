@@ -19,7 +19,7 @@ def _ctx(state, *, action, resolution_kind, turn_changes=None) -> PhaseContext:
 
 class WorldClockStateTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.state = GameState(load_script("border_town_tavern"))
+        self.state = GameState(load_script("tomb_entrance"))
 
     def test_default_clock(self) -> None:
         self.assertEqual(self.state.world_clock["day"], 1)
@@ -57,13 +57,13 @@ class WorldClockStateTest(unittest.TestCase):
 
 class TimeConfigTest(unittest.TestCase):
     def test_defaults_present(self) -> None:
-        cfg = get_time_config(GameState(load_script("border_town_tavern")))
+        cfg = get_time_config(GameState(load_script("tomb_entrance")))
         self.assertIn("morning", cfg["segments"])
         self.assertEqual(cfg["magnitude_table"]["small"], 1)
         self.assertGreater(len(cfg["triggers"]), 0)
 
     def test_script_override(self) -> None:
-        state = GameState(load_script("border_town_tavern"))
+        state = GameState(load_script("tomb_entrance"))
         state.script["world_model"] = {"time": {"segments": ["dawn", "dusk"]}}
         cfg = get_time_config(state)
         self.assertEqual(cfg["segments"], ["dawn", "dusk"])
@@ -73,7 +73,7 @@ class TimeConfigTest(unittest.TestCase):
 
 class TimePhaseTriggerTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.state = GameState(load_script("border_town_tavern"))
+        self.state = GameState(load_script("tomb_entrance"))
 
     def test_invalid_skips(self) -> None:
         ctx = _ctx(self.state, action={"type": "wait"}, resolution_kind="invalid")
@@ -131,7 +131,7 @@ class _FakeTimeLLM:
 
 class TimePhaseLLMTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.state = GameState(load_script("border_town_tavern"))
+        self.state = GameState(load_script("tomb_entrance"))
 
     def _ctx(self, action, llm) -> PhaseContext:
         ctx = _ctx(self.state, action=action, resolution_kind="standard")
@@ -174,7 +174,7 @@ from diceflow.app.game import Game
 
 class TimeIntegrationTest(unittest.TestCase):
     def test_wait_turn_advances_clock(self) -> None:
-        game = Game(script=load_script("border_town_tavern"), use_llm=False)
+        game = Game(script=load_script("tomb_entrance"), use_llm=False)
         self.assertEqual(game.state.world_clock["segment"], "morning")
         game.run_turn("等待")
         self.assertEqual(game.state.world_clock["segment"], "noon")
