@@ -25,6 +25,13 @@ DEFAULT_WORLD_MODEL: dict[str, Any] = {
             {"when": {"resolution_kind": "transition_attempt"}, "advance": {"segments": 1}},
         ],
     },
+    "favorability": {
+        "magnitude_table": {"small": 1, "medium": 2, "large": 3},
+        "thresholds": [
+            {"lte": -5, "set": {"hostile": True, "disposition": "hostile"}},
+            {"gte": 5, "set": {"disposition": "friendly"}},
+        ],
+    },
 }
 
 
@@ -46,6 +53,18 @@ def get_time_config(state: Any) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         cfg = {}
     defaults = DEFAULT_WORLD_MODEL["time"]
+    merged: dict[str, Any] = {}
+    for key, default_val in defaults.items():
+        merged[key] = cfg[key] if key in cfg else default_val
+    return merged
+
+
+def get_favorability_config(state: Any) -> dict[str, Any]:
+    """Return the favorability subsystem config, with defaults for missing keys."""
+    cfg = get_world_model_config(state).get("favorability", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    defaults = DEFAULT_WORLD_MODEL["favorability"]
     merged: dict[str, Any] = {}
     for key, default_val in defaults.items():
         merged[key] = cfg[key] if key in cfg else default_val
