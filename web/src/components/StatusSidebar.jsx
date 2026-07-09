@@ -268,7 +268,13 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
   }
 
   const hpRatio = status.max_hp > 0 ? status.hp / status.max_hp : 0
-  const knownEntities = status.known_entities || []
+  const knownEntities = (status.known_entities || []).filter(
+    (e) => e.type === 'npc' || (e.tags && e.tags.includes('npc'))
+  )
+  // Backpack lists only "pure" items: exclude inventory items that are also
+  // tracked as known entities (those are entity-backed, not plain items).
+  const entityNames = new Set((status.known_entities || []).map((e) => e.name))
+  const inventoryItems = (status.inventory || []).filter((item) => !entityNames.has(item))
 
   return (
     <div className="status-sidebar">
@@ -303,13 +309,13 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
 
       <AccordionSection
         title="背包"
-        count={status.inventory?.length ?? 0}
+        count={inventoryItems.length}
         expanded={expanded.backpack}
         onToggle={() => toggleSection('backpack')}
       >
-        {status.inventory && status.inventory.length > 0 ? (
+        {inventoryItems.length > 0 ? (
           <ul className="inv-list">
-            {status.inventory.map((item, i) => (
+            {inventoryItems.map((item, i) => (
               <li
                 key={i}
                 className={`inv-item${selectedEntity?.name === item ? ' selected' : ''}`}
