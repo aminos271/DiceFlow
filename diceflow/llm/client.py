@@ -94,6 +94,7 @@ class LLMClient:
         self.open_ended_content_prompt = (PROMPT_DIR / "open_ended_content.txt").read_text(encoding="utf-8")
         self.npc_autonomy_prompt = (PROMPT_DIR / "npc_autonomy.txt").read_text(encoding="utf-8")
         self.director_mode_prompt = (PROMPT_DIR / "director_mode.txt").read_text(encoding="utf-8")
+        self.time_judge_prompt = (PROMPT_DIR / "time_judge.txt").read_text(encoding="utf-8")
 
     # ── Intent / Adjudication (use intent_client) ────────────────────
 
@@ -130,6 +131,29 @@ class LLMClient:
                     "role": "user",
                     "content": f"当前状态：{state_summary}\n玩家行动：{action_summary}",
                 },
+            ],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(content)
+
+    def judge_time_impact(self, action: Action, state: GameState) -> dict[str, Any]:
+        """Qualitatively judge how much in-world time an action consumes.
+
+        Returns ``{"impact": "none|small|medium|large", "reason": ...}``.
+        Only the bucket is LLM-produced; the segment advance is mapped by
+        the time config's magnitude_table in the engine.
+        """
+        content = self._narration_chat(
+            [
+                {"role": "system", "content": self.time_judge_prompt},
+                {"role": "user", "content": json.dumps(
+                    {
+                        "action": action,
+                        "current_clock": state.world_clock,
+                        "scene": state.scene,
+                        "recent_events": state.recent_events,
+                    },
+                    ensure_ascii=False)},
             ],
             response_format={"type": "json_object"},
         )

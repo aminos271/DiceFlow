@@ -115,5 +115,59 @@ class TimePhaseTriggerTest(unittest.TestCase):
         self.assertEqual(out["set_clock"]["segment"], "morning")
 
 
+class _FakeTimeLLM:
+    narration_available = True
+
+    def __init__(self, impact: str, reason: str = "闲谈良久") -> None:
+        self.impact = impact
+        self.reason = reason
+        self.call_count = 0
+
+    def judge_time_impact(self, action, state) -> dict:
+        self.call_count += 1
+        self.last_action = action
+        return {"impact": self.impact, "reason": self.reason}
+
+
+class TimePhaseLLMTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.state = GameState(load_script("border_town_tavern"))
+
+    def _ctx(self, action, llm) -> PhaseContext:
+        ctx = _ctx(self.state, action=action, resolution_kind="standard")
+        ctx.llm = llm
+        return ctx
+
+    def test_llm_medium_bucket_advances_two_segments(self) -> None:
+        # default magnitude_table: medium=2
+        llm = _FakeTimeLLM("medium")
+        out = TimePhase().run(self._ctx(
+            {"type": "talk", "method_text": "和老板长谈一宿往事"}, llm))
+        self.assertEqual(llm.call_count, 1)
+        self.assertEqual(out["set_clock"]["segment"], "evening")  # morning+2
+
+    def test_llm_none_bucket_no_op(self) -> None:
+        llm = _FakeTimeLLM("none")
+        out = TimePhase().run(self._ctx(
+            {"type": "talk", "method_text": "随口问好"}, llm))
+        self.assertEqual(llm.call_count, 1)
+        self.assertEqual(out, {})
+
+    def test_script_trigger_takes_priority_over_llm(self) -> None:
+        llm = _FakeTimeLLM("large")
+        # wait is a scripted trigger -> LLM not consulted
+        out = TimePhase().run(self._ctx(
+            {"type": "wait", "method_text": "等待"}, llm))
+        self.assertEqual(llm.call_count, 0)
+        self.assertEqual(out["set_clock"]["segment"], "noon")
+
+    def test_no_llm_no_trigger_no_op(self) -> None:
+        ctx = _ctx(self.state,
+                   action={"type": "talk", "method_text": "随口问好"},
+                   resolution_kind="standard")
+        ctx.llm = None
+        self.assertEqual(TimePhase().run(ctx), {})
+
+
 if __name__ == "__main__":
     unittest.main()

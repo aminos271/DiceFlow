@@ -39,8 +39,34 @@ class TimePhase:
         return {"set_clock": new_clock, "events": [_event_for_segment(new_clock, cfg)]}
 
     def _llm_path(self, ctx: PhaseContext, cfg: dict) -> StateChanges:
-        # Implemented in Task 4 (LLM judge). No-op until then.
-        return {}
+        llm = ctx.llm
+        if llm is None or not getattr(llm, "narration_available", False):
+            return {}
+        if not hasattr(llm, "judge_time_impact"):
+            return {}
+        try:
+            verdict = llm.judge_time_impact(ctx.action, ctx.state)
+        except Exception:
+            return {}
+        if not isinstance(verdict, dict):
+            return {}
+        impact = str(verdict.get("impact") or "none")
+        magnitude_table = cfg.get("magnitude_table", {})
+        n = magnitude_table.get(impact, 0) if isinstance(magnitude_table, dict) else 0
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            n = 0
+        if n <= 0:
+            return {}
+        new_clock = _resolve_new_clock(ctx.state, cfg, {"segments": n})
+        if new_clock is None:
+            return {}
+        reason = str(verdict.get("reason") or "")
+        event = _event_for_segment(new_clock, cfg)
+        if reason:
+            event = f"{event}（{reason}）"
+        return {"set_clock": new_clock, "events": [event]}
 
 
 def _match_trigger(triggers: list, ctx: PhaseContext) -> dict | None:
