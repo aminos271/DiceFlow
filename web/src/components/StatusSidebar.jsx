@@ -43,51 +43,6 @@ function DetailRow({ label, value }) {
   )
 }
 
-function HintGroups({ status, onPickHint }) {
-  const groups = status.hint_groups || {}
-  const labels = {
-    recommended: '推荐行动',
-    explore: '探索',
-    risky: '冒险行动',
-  }
-  const orderedKeys = ['recommended', 'explore', 'risky'].filter(key => groups[key]?.length)
-
-  if (orderedKeys.length === 0) {
-    return status.hints && status.hints.length > 0 ? (
-      status.hints.map((hint, i) => (
-        <button
-          key={i}
-          type="button"
-          className="hint-item hint-button"
-          onClick={() => onPickHint?.(`我想${hint}。`)}
-        >
-          💡 {hint}
-        </button>
-      ))
-    ) : (
-      <div className="inv-empty">暂无提示</div>
-    )
-  }
-
-  return orderedKeys.map(key => (
-    <div key={key} className={`hint-group hint-group-${key}`}>
-      <div className="hint-group-title">{labels[key]}</div>
-      {groups[key].map((hint, i) => (
-        <button
-          key={`${key}-${i}`}
-          type="button"
-          className="hint-item rich-hint hint-button"
-          onClick={() => onPickHint?.(hint.command || hint.label)}
-          title="填入输入框"
-        >
-          <div className="hint-label">{hint.label}</div>
-          {hint.detail && <div className="hint-detail">{hint.detail}</div>}
-        </button>
-      ))}
-    </div>
-  ))
-}
-
 function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -298,15 +253,12 @@ function EntityDetailPanel({ entity, sessionId, onEditEntity, onClose }) {
   )
 }
 
-export default function StatusSidebar({ status, selectedEntity, onSelectEntity, sessionId, onEditEntity, onPickHint }) {
+export default function StatusSidebar({ status, selectedEntity, onSelectEntity, sessionId, onEditEntity }) {
   const [expanded, setExpanded] = useState({
     status: true,
     backpack: true,
     scene: true,
-    exits: true,
-    threads: true,
     entities: true,
-    hints: false,
   })
 
   if (!status) return null
@@ -382,58 +334,7 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
       </AccordionSection>
 
       <AccordionSection
-        title="可前往地点"
-        count={status.exits?.length ?? 0}
-        expanded={expanded.exits}
-        onToggle={() => toggleSection('exits')}
-      >
-        {status.exits?.length ? (
-          status.exits.map((exit) => (
-            <div key={exit.location_id} className="exit-item">
-              <span className="exit-direction">{exit.direction}</span>
-              <span className="exit-name">📍 {exit.location_name}</span>
-            </div>
-          ))
-        ) : (
-          <div className="inv-empty">暂无已知出口</div>
-        )}
-      </AccordionSection>
-
-      <AccordionSection
-        title="当前线索/目标"
-        count={status.threads?.filter(t => t.status === 'active').length ?? 0}
-        expanded={expanded.threads}
-        onToggle={() => toggleSection('threads')}
-      >
-        {status.threads?.length ? (
-          status.threads.map((thread) => (
-            <div key={thread.id} className={`thread-item ${thread.status}`}>
-              <div className="thread-title">
-                {thread.status === 'completed' ? '✓ ' : thread.status === 'failed' ? '✗ ' : '◆ '}
-                {thread.title}
-              </div>
-              <div className="thread-progress-outer">
-                <div
-                  className={`thread-progress-inner ${thread.status}`}
-                  style={{ width: `${Math.max(0, Math.min(100, thread.progress))}%` }}
-                />
-              </div>
-              <div className="thread-meta">
-                <span>{thread.progress}%</span>
-                <span>{thread.status === 'active' ? '进行中' : thread.status === 'completed' ? '已完成' : '已失败'}</span>
-              </div>
-              {thread.next_hint && thread.status === 'active' && (
-                <div className="thread-hint">💡 {thread.next_hint}</div>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="inv-empty">暂无线索</div>
-        )}
-      </AccordionSection>
-
-      <AccordionSection
-        title="实体记录"
+        title="人物"
         count={knownEntities.length}
         expanded={expanded.entities}
         onToggle={() => toggleSection('entities')}
@@ -480,15 +381,6 @@ export default function StatusSidebar({ status, selectedEntity, onSelectEntity, 
         ) : (
           <div className="inv-empty">暂无记录</div>
         )}
-      </AccordionSection>
-
-      <AccordionSection
-        title="提示"
-        count={status.hints?.length ?? 0}
-        expanded={expanded.hints}
-        onToggle={() => toggleSection('hints')}
-      >
-        <HintGroups status={status} onPickHint={onPickHint} />
       </AccordionSection>
 
       {selectedEntity && (

@@ -113,12 +113,6 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
     }
   }, [status?.known_entities])
 
-  const handlePickHint = useCallback((command) => {
-    if (!command || sending || isGameOver) return
-    setInputDraft(command)
-    setInputFocusToken(token => token + 1)
-  }, [sending, isGameOver])
-
   const handleToggleForceCritical = useCallback(() => {
     if (sending || isGameOver) return
     setForceCriticalArmed((armed) => !armed)
@@ -151,7 +145,6 @@ export default function GamePage({ sessionId, scriptTitle, onBack, onOpenHistory
           onSelectEntity={handleSelectEntity}
           sessionId={sessionId}
           onEditEntity={handleEntityEdit}
-          onPickHint={handlePickHint}
         />
       </div>
 
